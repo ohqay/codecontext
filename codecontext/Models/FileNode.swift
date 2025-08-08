@@ -87,8 +87,8 @@ final class FileTreeModel {
     var totalSelectedTokens: Int = 0
     private let tokenizer: Tokenizer
     
-    init(tokenizer: Tokenizer = TransformersTokenizer()) {
-        self.tokenizer = tokenizer
+    init(tokenizer: Tokenizer? = nil) {
+        self.tokenizer = tokenizer ?? HuggingFaceTokenizer()
     }
     
     func loadDirectory(at url: URL, ignoreRules: IgnoreRules) async {
@@ -136,7 +136,12 @@ final class FileTreeModel {
         for node in allNodes where !node.isDirectory {
             if let data = try? Data(contentsOf: node.url),
                let content = String(data: data, encoding: .utf8) {
-                node.tokenCount = await tokenizer.countTokens(content)
+                do {
+                    node.tokenCount = try await tokenizer.countTokens(content)
+                } catch {
+                    print("Warning: Failed to count tokens for \(node.name): \(error)")
+                    node.tokenCount = 0
+                }
             }
         }
         

@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		F5350C0D2E46996900399C58 /* Transformers in Frameworks */ = {isa = PBXBuildFile; productRef = F5350C0C2E46996900399C58 /* Transformers */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		F5350BC72E4677EC00399C58 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -52,6 +56,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F5350C0D2E46996900399C58 /* Transformers in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -112,6 +117,7 @@
 			);
 			name = codecontext;
 			packageProductDependencies = (
+				F5350C0C2E46996900399C58 /* Transformers */,
 			);
 			productName = codecontext;
 			productReference = F5350BB72E4677EB00399C58 /* codecontext.app */;
@@ -195,6 +201,9 @@
 			);
 			mainGroup = F5350BAE2E4677EB00399C58;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				F5350C0B2E46996900399C58 /* XCRemoteSwiftPackageReference "swift-transformers" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = F5350BB82E4677EB00399C58 /* Products */;
 			projectDirPath = "";
@@ -573,6 +582,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		F5350C0B2E46996900399C58 /* XCRemoteSwiftPackageReference "swift-transformers" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/huggingface/swift-transformers";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.1.22;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		F5350C0C2E46996900399C58 /* Transformers */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F5350C0B2E46996900399C58 /* XCRemoteSwiftPackageReference "swift-transformers" */;
+			productName = Transformers;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = F5350BAF2E4677EB00399C58 /* Project object */;
 }

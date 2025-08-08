@@ -8,7 +8,7 @@ final class WorkspaceEngine {
     private let xml = XMLFormatterService()
 
     init(tokenizer: Tokenizer? = nil) {
-        self.tokenizer = tokenizer ?? TransformersTokenizer()
+        self.tokenizer = tokenizer ?? HuggingFaceTokenizer()
     }
 
     struct Output {
@@ -40,8 +40,13 @@ final class WorkspaceEngine {
         var totalTokens = 0
         for file in files {
             guard let data = try? Data(contentsOf: file.url), let content = String(data: data, encoding: .utf8) else { continue }
-            let tokens = await tokenizer.countTokens(content)
-            totalTokens += tokens
+            do {
+                let tokens = try await tokenizer.countTokens(content)
+                totalTokens += tokens
+            } catch {
+                print("Warning: Failed to count tokens for \(file.url.lastPathComponent): \(error)")
+                // Continue processing even if tokenization fails for one file
+            }
             let entry = XMLFormatterService.FileEntry(
                 displayName: file.url.lastPathComponent,
                 absolutePath: file.url.path,

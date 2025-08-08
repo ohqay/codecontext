@@ -11,16 +11,18 @@ import Foundation
 
 struct codecontextTests {
 
-    @Test func fallbackTokenizerCounts() async throws {
-        let t = FallbackTokenizer()
-        let emptyCount = await t.countTokens("")
+    @Test func huggingFaceTokenizerLoads() async throws {
+        let tokenizer = HuggingFaceTokenizer(modelName: "gpt2")
+        
+        // Test that the tokenizer can count tokens for various inputs
+        let emptyCount = try await tokenizer.countTokens("")
         #expect(emptyCount == 0)
         
-        let shortCount = await t.countTokens("abcd")
-        #expect(shortCount == 1)
+        let simpleCount = try await tokenizer.countTokens("Hello world")
+        #expect(simpleCount > 0)
         
-        let longCount = await t.countTokens(String(repeating: "a", count: 100))
-        #expect(longCount >= 20)
+        let longTextCount = try await tokenizer.countTokens("The quick brown fox jumps over the lazy dog.")
+        #expect(longTextCount > 5)  // Should be multiple tokens for this sentence
     }
 
     @Test @MainActor func xmlFormatterRendersFile() async throws {
