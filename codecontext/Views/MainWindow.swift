@@ -11,17 +11,21 @@ struct MainWindow: View {
     @Query(sort: \SDWorkspace.lastOpenedAt, order: .reverse) private var workspaces: [SDWorkspace]
 
     @State private var appState = AppState()
-    @State private var selection: SDWorkspace?
-    @State private var filterFocused: Bool = false
+    @State private var tabManager = TabManager()
 
     var body: some View {
-        NavigationSplitView {
-            SidebarView(selection: $selection, filterFocused: $filterFocused)
-        } detail: {
-            if let selection {
-                WorkspaceDetailView(workspace: selection, includeFileTree: $appState.includeFileTreeInOutput)
-            } else {
-                EmptySelectionView()
+        TabView(selection: $tabManager.selectedTabId) {
+            ForEach(tabManager.tabs) { tab in
+                WorkspaceTabView(
+                    tab: tab,
+                    tabManager: tabManager,
+                    appState: appState,
+                    modelContext: modelContext
+                )
+                .tabItem {
+                    Text(tabManager.displayName(for: tab))
+                }
+                .tag(tab.id)
             }
         }
         .focusedValue(\._workspaceActions, WorkspaceActions(
@@ -30,7 +34,8 @@ struct MainWindow: View {
             copyOutput: copyOutput,
             toggleFileTree: { appState.includeFileTreeInOutput.toggle() },
             refresh: triggerRefresh,
-            focusFilter: { filterFocused = true }
+            focusFilter: focusCurrentTabFilter,
+            toggleSidebar: toggleSidebar
         ))
         .toolbar { }
         .onAppear { ensureDefaultPreference() }
@@ -44,9 +49,7 @@ struct MainWindow: View {
     }
 
     private func createNewTab() {
-        NSApp.sendAction(#selector(NSWindow.performClose(_:)), to: nil, from: nil)
-        // SwiftUI will create a new WindowGroup instance with the same content.
-        NSApp.sendAction(#selector(NSApplication.newWindowForTab(_:)), to: nil, from: nil)
+        tabManager.addNewTab()
     }
 
     private func openFolder() {
@@ -59,6 +62,72 @@ struct MainWindow: View {
 
     private func triggerRefresh() {
         NotificationCenter.default.post(name: .requestRefresh, object: nil)
+    }
+    
+    private func focusCurrentTabFilter() {
+        guard let currentTab = tabManager.selectedTab else { return }
+        tabManager.updateFilterFocused(for: currentTab.id, focused: true)
+    }
+    
+    private func toggleSidebar() {
+        // This will be handled by the focused tab's view
+        // Just a placeholder for the command menu action
+    }
+}
+
+/// Individual tab view that contains its own NavigationSplitView and workspace selection
+private struct WorkspaceTabView: View {
+    let tab: WorkspaceTab
+    let tabManager: TabManager
+    let appState: AppState
+    let modelContext: ModelContext
+    
+    @State private var columnVisibility: NavigationSplitViewVisibility = .all
+    
+    // Local binding for this tab's workspace selection
+    private var selection: Binding<SDWorkspace?> {
+        Binding(
+            get: { tab.workspace },
+            set: { tabManager.updateWorkspace(for: tab.id, workspace: $0) }
+        )
+    }
+    
+    // Local binding for this tab's filter focus state
+    private var filterFocused: Binding<Bool> {
+        Binding(
+            get: { tab.filterFocused },
+            set: { tabManager.updateFilterFocused(for: tab.id, focused: $0) }
+        )
+    }
+    
+    var body: some View {
+        NavigationSplitView(columnVisibility: $columnVisibility) {
+            SidebarView(selection: selection, filterFocused: filterFocused)
+        } detail: {
+            if let selectedWorkspace = tab.workspace {
+                WorkspaceDetailView(workspace: selectedWorkspace, includeFileTree: Binding(
+                    get: { appState.includeFileTreeInOutput },
+                    set: { appState.includeFileTreeInOutput = $0 }
+                ))
+            } else {
+                EmptySelectionView()
+            }
+        }
+        .focusedValue(\._workspaceActions, WorkspaceActions(
+            newTab: { tabManager.addNewTab() },
+            openFolder: { FolderPicker.openFolder(modelContext: modelContext) },
+            copyOutput: { NotificationCenter.default.post(name: .requestCopyOutput, object: nil) },
+            toggleFileTree: { appState.includeFileTreeInOutput.toggle() },
+            refresh: { NotificationCenter.default.post(name: .requestRefresh, object: nil) },
+            focusFilter: { tabManager.updateFilterFocused(for: tab.id, focused: true) },
+            toggleSidebar: toggleSidebar
+        ))
+    }
+    
+    private func toggleSidebar() {
+        withAnimation(.easeInOut(duration: 0.3)) {
+            columnVisibility = columnVisibility == .detailOnly ? .all : .detailOnly
+        }
     }
 }
 
@@ -74,4 +143,5 @@ extension Notification.Name {
     static let requestCopyOutput = Notification.Name("requestCopyOutput")
     static let requestRefresh = Notification.Name("requestRefresh")
     static let requestOpenFromWelcome = Notification.Name("requestOpenFromWelcome")
+    static let fileSystemChanged = Notification.Name("fileSystemChanged")
 }

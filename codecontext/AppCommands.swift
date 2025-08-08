@@ -22,6 +22,11 @@ struct AppCommands: Commands {
             Button("Filter Files") { actions?.focusFilter() }
                 .keyboardShortcut("f")
         }
+
+        CommandMenu("View") {
+            Button("Toggle Sidebar") { actions?.toggleSidebar() }
+                .keyboardShortcut("\\")
+        }
     }
 }
 
@@ -44,5 +49,6 @@ struct WorkspaceActions {
     let toggleFileTree: () -> Void
     let refresh: () -> Void
     let focusFilter: () -> Void
+    let toggleSidebar: () -> Void
 }
 
