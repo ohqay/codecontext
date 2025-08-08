@@ -12,10 +12,14 @@ struct ContentView: View {
     @State private var showingWelcome = true
 
     var body: some View {
-        MainWindow()
-            .sheet(isPresented: $showingWelcome) {
-                WelcomeView(showingWelcome: $showingWelcome)
-            }
+        ZStack {
+            MainWindow()
+                .sheet(isPresented: $showingWelcome) {
+                    WelcomeView(showingWelcome: $showingWelcome)
+                }
+            
+            NotificationOverlay()
+        }
     }
 }
 
