@@ -1,6 +1,9 @@
 # Xcode
 #
 # gitignore contributors: remember to update Global/Xcode.gitignore, Objective-C.gitignore & Swift.gitignore
+#
+## IDE's and Code Agents
+.claude/
 
 ## User settings
 xcuserdata/
