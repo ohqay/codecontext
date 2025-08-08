@@ -5,9 +5,10 @@ struct WorkspaceDetailView: View {
     @Binding var includeFileTree: Bool
 
     @Environment(\.modelContext) private var modelContext
+    @Environment(NotificationSystem.self) private var notificationSystem
     @State private var output: String = ""
     @State private var totalTokens: Int = 0
-    private let engine = WorkspaceEngine()
+    @State private var engine: WorkspaceEngine?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -31,13 +32,37 @@ struct WorkspaceDetailView: View {
             NSPasteboard.general.setString(output, forType: .string)
         }
         .onReceive(NotificationCenter.default.publisher(for: .requestRefresh)) { _ in
-            // TODO: Recompute
+            Task {
+                await regenerateOutput()
+            }
         }
-        .task { await regenerateOutput() }
+        .onReceive(NotificationCenter.default.publisher(for: .fileSystemChanged)) { _ in
+            Task {
+                await regenerateOutput()
+            }
+        }
+        .onChange(of: includeFileTree) { _, _ in
+            Task {
+                await regenerateOutput()
+            }
+        }
+        .task { 
+            // Initialize engine with notification system
+            engine = WorkspaceEngine(notificationSystem: notificationSystem)
+            
+            // Set up engine callback to auto-regenerate on content changes
+            engine?.onContentChange = {
+                Task { @MainActor in
+                    // Optional: Add visual feedback for auto-refresh
+                    print("WorkspaceDetailView: Content changed, output updated")
+                }
+            }
+            await regenerateOutput() 
+        }
     }
 
     private func regenerateOutput() async {
-        if let result = await engine.generate(for: workspace, modelContext: modelContext, includeTree: includeFileTree) {
+        if let result = await engine?.generate(for: workspace, modelContext: modelContext, includeTree: includeFileTree) {
             output = result.xml
             totalTokens = result.totalTokens
         }

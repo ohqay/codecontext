@@ -86,15 +86,29 @@ final class FileTreeModel {
     var selectedFiles: Set<URL> = []
     var totalSelectedTokens: Int = 0
     private let tokenizer: Tokenizer
+    private var fileSystemWatcher: FileSystemWatcher?
+    private var currentIgnoreRules: IgnoreRules?
+    
+    // Callback for file system changes
+    var onFileSystemChange: (() -> Void)?
     
     init(tokenizer: Tokenizer? = nil) {
         self.tokenizer = tokenizer ?? HuggingFaceTokenizer()
     }
     
     func loadDirectory(at url: URL, ignoreRules: IgnoreRules) async {
+        // Stop existing watcher if any
+        stopWatching()
+        
+        // Store ignore rules for use in file change handling
+        currentIgnoreRules = ignoreRules
+        
         rootNode = FileNode(url: url, isDirectory: true)
         await scanDirectory(node: rootNode!, ignoreRules: ignoreRules)
         await calculateTokenCounts()
+        
+        // Start watching for file system changes
+        startWatching(at: url)
     }
     
     private func scanDirectory(node: FileNode, ignoreRules: IgnoreRules) async {
@@ -157,5 +171,163 @@ final class FileTreeModel {
     private func updateTotalSelectedTokens() {
         let selectedFiles = rootNode?.getSelectedFiles() ?? []
         totalSelectedTokens = selectedFiles.reduce(0) { $0 + $1.tokenCount }
+    }
+    
+    // Restore selections from saved JSON data
+    func restoreSelections(from selectionJSON: String) {
+        guard !selectionJSON.isEmpty,
+              let jsonData = selectionJSON.data(using: .utf8),
+              let savedPaths = try? JSONDecoder().decode(Set<String>.self, from: jsonData) else {
+            return
+        }
+        
+        // Clear existing selections
+        allNodes.forEach { $0.isSelected = false }
+        
+        // Restore selections for files that still exist
+        for node in allNodes where !node.isDirectory {
+            if savedPaths.contains(node.url.path) {
+                node.isSelected = true
+            }
+        }
+        
+        updateTotalSelectedTokens()
+    }
+    
+    // Refresh the file tree by rescanning the directory
+    func refresh(ignoreRules: IgnoreRules) async {
+        guard let rootURL = rootNode?.url else { return }
+        
+        // Save current selections before refreshing
+        let currentSelections = Set(allNodes.compactMap { node in
+            node.isSelected && !node.isDirectory ? node.url.path : nil
+        })
+        
+        // Clear existing data
+        allNodes.removeAll()
+        rootNode = nil
+        
+        // Rescan directory
+        rootNode = FileNode(url: rootURL, isDirectory: true)
+        await scanDirectory(node: rootNode!, ignoreRules: ignoreRules)
+        await calculateTokenCounts()
+        
+        // Restore selections for files that still exist
+        for node in allNodes where !node.isDirectory {
+            if currentSelections.contains(node.url.path) {
+                node.isSelected = true
+            }
+        }
+        
+        updateTotalSelectedTokens()
+    }
+    
+    // MARK: - File System Watching
+    
+    private func startWatching(at url: URL) {
+        fileSystemWatcher = FileSystemWatcher(url: url, debounceInterval: 0.5)
+        fileSystemWatcher?.onChanges = { [weak self] changes in
+            Task { @MainActor in
+                await self?.handleFileSystemChanges(changes)
+            }
+        }
+        
+        do {
+            try fileSystemWatcher?.startWatching()
+            print("Started watching directory: \(url.path)")
+        } catch {
+            print("Failed to start file system watching: \(error)")
+        }
+    }
+    
+    private func stopWatching() {
+        fileSystemWatcher?.stopWatching()
+        fileSystemWatcher = nil
+    }
+    
+    private func handleFileSystemChanges(_ changes: [FileSystemWatcher.FileChange]) async {
+        guard let rootURL = rootNode?.url,
+              let ignoreRules = currentIgnoreRules else { return }
+        
+        print("Detected \(changes.count) file system change(s)")
+        
+        // Save current selections before updating
+        let currentSelections = Set(allNodes.compactMap { node in
+            node.isSelected && !node.isDirectory ? node.url.path : nil
+        })
+        
+        var needsFullRefresh = false
+        var modifiedFiles: [URL] = []
+        
+        for change in changes {
+            switch change.changeType {
+            case .created, .deleted, .renamed:
+                // These require a full refresh of the tree structure
+                needsFullRefresh = true
+            case .modified:
+                // Track modified files for incremental token updates
+                modifiedFiles.append(change.url)
+            case .unknown:
+                needsFullRefresh = true
+            }
+        }
+        
+        if needsFullRefresh {
+            // Perform a full refresh for structural changes
+            await performFullRefresh(rootURL: rootURL, ignoreRules: ignoreRules, preservedSelections: currentSelections)
+        } else if !modifiedFiles.isEmpty {
+            // Perform incremental updates for file modifications only
+            await performIncrementalUpdate(modifiedFiles: modifiedFiles)
+        }
+        
+        // Notify UI of changes
+        onFileSystemChange?()
+    }
+    
+    private func performFullRefresh(rootURL: URL, ignoreRules: IgnoreRules, preservedSelections: Set<String>) async {
+        // Clear existing data
+        allNodes.removeAll()
+        rootNode = nil
+        
+        // Rescan directory
+        rootNode = FileNode(url: rootURL, isDirectory: true)
+        await scanDirectory(node: rootNode!, ignoreRules: ignoreRules)
+        await calculateTokenCounts()
+        
+        // Restore selections for files that still exist
+        for node in allNodes where !node.isDirectory {
+            if preservedSelections.contains(node.url.path) {
+                node.isSelected = true
+            }
+        }
+        
+        updateTotalSelectedTokens()
+    }
+    
+    private func performIncrementalUpdate(modifiedFiles: [URL]) async {
+        // Only recalculate tokens for modified files
+        for fileURL in modifiedFiles {
+            // Find the corresponding node
+            if let node = allNodes.first(where: { $0.url == fileURL && !$0.isDirectory }) {
+                // Recalculate token count for this file only
+                if let data = try? Data(contentsOf: fileURL),
+                   let content = String(data: data, encoding: .utf8) {
+                    do {
+                        let oldTokenCount = node.tokenCount
+                        node.tokenCount = try await tokenizer.countTokens(content)
+                        
+                        if oldTokenCount != node.tokenCount {
+                            print("Updated token count for \(node.name): \(oldTokenCount) -> \(node.tokenCount)")
+                            // Update aggregate counts up the tree
+                            node.parent?.updateAggregateTokens()
+                        }
+                    } catch {
+                        print("Warning: Failed to update tokens for \(node.name): \(error)")
+                    }
+                }
+            }
+        }
+        
+        updateTotalSelectedTokens()
     }
 }
