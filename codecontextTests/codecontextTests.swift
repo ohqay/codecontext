@@ -11,7 +11,7 @@ import Foundation
 
 struct codecontextTests {
 
-    @Test func huggingFaceTokenizerLoads() async throws {
+    @Test @MainActor func huggingFaceTokenizerLoads() async throws {
         let tokenizer = HuggingFaceTokenizer(modelName: "gpt2")
         
         // Test that the tokenizer can count tokens for various inputs
