@@ -119,20 +119,12 @@ private struct FilterBar: View {
 private struct SidebarToolbar: ToolbarContent {
     @Environment(\.modelContext) private var modelContext
     var body: some ToolbarContent {
-        ToolbarItem(placement: .navigation) {
-            Button(action: toggleSidebar) { Image(systemName: "sidebar.leading") }
-                .help("Toggle Sidebar")
-        }
         ToolbarItem(placement: .automatic) {
             Menu("Filters") { FiltersMenu() }
         }
         ToolbarItem(placement: .automatic) {
             Button("Open…") { FolderPicker.openFolder(modelContext: modelContext) }
         }
-    }
-
-    private func toggleSidebar() {
-        NSApp.keyWindow?.firstResponder?.tryToPerform(#selector(NSSplitViewController.toggleSidebar(_:)), with: nil)
     }
 }
 

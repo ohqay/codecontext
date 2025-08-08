@@ -1,12 +1,28 @@
 import SwiftUI
 import AppKit
+import QuickLook
+import Quartz
+
+// Custom NSOutlineView that handles keyboard shortcuts for Quick Look
+class QuickLookOutlineView: NSOutlineView {
+    var onSpacebarPressed: ((Any?) -> Void)?
+    
+    override func keyDown(with event: NSEvent) {
+        if event.keyCode == 49 { // Spacebar keycode
+            if let selectedItem = item(atRow: selectedRow) {
+                onSpacebarPressed?(selectedItem)
+                return
+            }
+        }
+        super.keyDown(with: event)
+    }
+}
 
 // NSOutlineView-based file tree for performance with large directories
 struct FileTreeView: NSViewRepresentable {
     @Binding var fileTreeModel: FileTreeModel
     @Binding var filterText: String
     let onSelectionChange: (FileNode) -> Void
-    let onPreview: (FileNode) -> Void
     
     func makeCoordinator() -> Coordinator {
         Coordinator(self)
@@ -14,7 +30,7 @@ struct FileTreeView: NSViewRepresentable {
     
     func makeNSView(context: Context) -> NSScrollView {
         let scrollView = NSScrollView()
-        let outlineView = NSOutlineView()
+        let outlineView = QuickLookOutlineView()
         
         outlineView.delegate = context.coordinator
         outlineView.dataSource = context.coordinator
@@ -51,6 +67,9 @@ struct FileTreeView: NSViewRepresentable {
         scrollView.hasHorizontalScroller = false
         scrollView.autohidesScrollers = false
         
+        // Set up spacebar handler
+        outlineView.onSpacebarPressed = context.coordinator.handleSpacebarPress
+        
         context.coordinator.outlineView = outlineView
         
         return scrollView
@@ -62,18 +81,79 @@ struct FileTreeView: NSViewRepresentable {
         context.coordinator.parent = self
         outlineView.reloadData()
         
-        // Expand root by default
+        // Expand root by default and auto-expand when filtering
         if let root = fileTreeModel.rootNode {
             outlineView.expandItem(root)
+            
+            // If we have a filter, expand all matching directories to show results
+            if !filterText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                expandMatchingItems(outlineView, node: root)
+            }
         }
     }
     
-    class Coordinator: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegate {
+    /// Recursively expand directories that contain filtered items
+    private func expandMatchingItems(_ outlineView: NSOutlineView, node: FileNode) {
+        for child in node.children {
+            if child.isDirectory {
+                let hasMatching = hasMatchingDescendant(child, filter: filterText.trimmingCharacters(in: .whitespacesAndNewlines))
+                if hasMatching {
+                    outlineView.expandItem(child)
+                    expandMatchingItems(outlineView, node: child)
+                }
+            }
+        }
+    }
+    
+    /// Helper method to check if a directory has matching descendants (shared logic)
+    private func hasMatchingDescendant(_ node: FileNode, filter: String) -> Bool {
+        if filter.isEmpty { return false }
+        
+        // Check if the directory name itself matches
+        if node.name.localizedStandardContains(filter) || 
+           node.url.path.localizedStandardContains(filter) {
+            return true
+        }
+        
+        // Check all children recursively
+        for child in node.children {
+            if child.isDirectory {
+                if hasMatchingDescendant(child, filter: filter) {
+                    return true
+                }
+            } else {
+                if child.name.localizedStandardContains(filter) || 
+                   child.url.path.localizedStandardContains(filter) {
+                    return true
+                }
+            }
+        }
+        
+        return false
+    }
+    
+    class Coordinator: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegate, QLPreviewPanelDataSource, QLPreviewPanelDelegate {
         var parent: FileTreeView
         weak var outlineView: NSOutlineView?
+        private var currentPreviewFile: FileNode?
         
         init(_ parent: FileTreeView) {
             self.parent = parent
+        }
+        
+        func handleSpacebarPress(_ item: Any?) {
+            guard let node = item as? FileNode, !node.isDirectory else { return }
+            
+            currentPreviewFile = node
+            
+            if QLPreviewPanel.sharedPreviewPanelExists() && QLPreviewPanel.shared()?.isVisible == true {
+                QLPreviewPanel.shared()?.orderOut(nil)
+            } else {
+                let panel = QLPreviewPanel.shared()
+                panel?.dataSource = self
+                panel?.delegate = self
+                panel?.makeKeyAndOrderFront(nil)
+            }
         }
         
         // MARK: - DataSource
@@ -83,7 +163,7 @@ struct FileTreeView: NSViewRepresentable {
                 return parent.fileTreeModel.rootNode != nil ? 1 : 0
             }
             guard let node = item as? FileNode else { return 0 }
-            return node.children.count
+            return filteredChildren(of: node).count
         }
         
         func outlineView(_ outlineView: NSOutlineView, child index: Int, ofItem item: Any?) -> Any {
@@ -91,12 +171,39 @@ struct FileTreeView: NSViewRepresentable {
                 return parent.fileTreeModel.rootNode!
             }
             guard let node = item as? FileNode else { return FileNode(url: URL(fileURLWithPath: "/"), isDirectory: false) }
-            return node.children[index]
+            let children = filteredChildren(of: node)
+            return children[index]
         }
         
         func outlineView(_ outlineView: NSOutlineView, isItemExpandable item: Any) -> Bool {
             guard let node = item as? FileNode else { return false }
-            return node.isDirectory && !node.children.isEmpty
+            return node.isDirectory && !filteredChildren(of: node).isEmpty
+        }
+        
+        /// Filter children based on the current filter text
+        private func filteredChildren(of node: FileNode) -> [FileNode] {
+            let filterText = parent.filterText.trimmingCharacters(in: .whitespacesAndNewlines)
+            
+            // If no filter text, return all children
+            if filterText.isEmpty {
+                return node.children
+            }
+            
+            return node.children.filter { child in
+                // For directories, include if any descendant matches the filter
+                if child.isDirectory {
+                    return hasMatchingDescendant(child, filter: filterText)
+                } else {
+                    // For files, match against filename or path
+                    return child.name.localizedStandardContains(filterText) || 
+                           child.url.path.localizedStandardContains(filterText)
+                }
+            }
+        }
+        
+        /// Recursively check if a directory has any descendant that matches the filter
+        private func hasMatchingDescendant(_ node: FileNode, filter: String) -> Bool {
+            return parent.hasMatchingDescendant(node, filter: filter)
         }
         
         // MARK: - Delegate
@@ -195,8 +302,6 @@ struct FileTreeView: NSViewRepresentable {
         }
         
         func outlineView(_ outlineView: NSOutlineView, shouldSelectItem item: Any) -> Bool {
-            guard let node = item as? FileNode else { return false }
-            parent.onPreview(node)
             return true
         }
         
@@ -209,6 +314,30 @@ struct FileTreeView: NSViewRepresentable {
             guard let node = notification.userInfo?["NSObject"] as? FileNode else { return }
             node.isExpanded = false
         }
+        
+        // MARK: - QLPreviewPanelDataSource
+        
+        func numberOfPreviewItems(in panel: QLPreviewPanel) -> Int {
+            return currentPreviewFile != nil ? 1 : 0
+        }
+        
+        func previewPanel(_ panel: QLPreviewPanel, previewItemAt index: Int) -> QLPreviewItem {
+            return currentPreviewFile?.url as? QLPreviewItem ?? URL(fileURLWithPath: "/") as QLPreviewItem
+        }
+        
+        // MARK: - QLPreviewPanelDelegate
+        
+        func previewPanel(_ panel: QLPreviewPanel, handle event: NSEvent) -> Bool {
+            if event.type == .keyDown && event.keyCode == 49 { // Spacebar
+                panel.orderOut(nil)
+                return true
+            }
+            if event.type == .keyDown && event.keyCode == 53 { // Escape
+                panel.orderOut(nil)
+                return true
+            }
+            return false
+        }
     }
 }
 
@@ -217,15 +346,12 @@ struct FileTreeContainer: View {
     @State private var fileTreeModel = FileTreeModel()
     @Binding var workspace: SDWorkspace
     @Binding var filterText: String
-    @State private var previewNode: FileNode?
-    @State private var showingQuickLook = false
     
     var body: some View {
         FileTreeView(
             fileTreeModel: $fileTreeModel,
             filterText: $filterText,
-            onSelectionChange: handleSelectionChange,
-            onPreview: handlePreview
+            onSelectionChange: handleSelectionChange
         )
         .task {
             await loadWorkspace()
@@ -235,9 +361,9 @@ struct FileTreeContainer: View {
                 await loadWorkspace()
             }
         }
-        .sheet(isPresented: $showingQuickLook) {
-            if let node = previewNode {
-                QuickLookView(fileNode: node)
+        .onReceive(NotificationCenter.default.publisher(for: .requestRefresh)) { _ in
+            Task {
+                await refreshWorkspace()
             }
         }
     }
@@ -257,10 +383,29 @@ struct FileTreeContainer: View {
             excludeVenv: workspace.excludeVenv,
             excludeDSStore: workspace.excludeDSStore,
             excludeDerivedData: workspace.excludeDerivedData,
-            customPatterns: workspace.customIgnore.split(separator: "\n").map(String.init)
+            customPatterns: workspace.customIgnore.split(separator: "\n").map(String.init),
+            rootPath: url.path
         )
         
         await fileTreeModel.loadDirectory(at: url, ignoreRules: ignoreRules)
+        
+        // Set up file system change notification
+        fileTreeModel.onFileSystemChange = {
+            Task { @MainActor in
+                // Post notification to trigger workspace detail view refresh
+                NotificationCenter.default.post(name: .fileSystemChanged, object: nil)
+                
+                // Update workspace selection state in case files were added/removed
+                updateWorkspaceSelection()
+            }
+        }
+        
+        // Restore saved selections after loading the directory
+        if !workspace.selectionJSON.isEmpty {
+            await MainActor.run {
+                fileTreeModel.restoreSelections(from: workspace.selectionJSON)
+            }
+        }
     }
     
     private func resolveURL(from workspace: SDWorkspace) -> URL? {
@@ -280,10 +425,39 @@ struct FileTreeContainer: View {
         updateWorkspaceSelection()
     }
     
-    private func handlePreview(_ node: FileNode) {
-        if !node.isDirectory {
-            previewNode = node
-            showingQuickLook = true
+    
+    private func refreshWorkspace() async {
+        guard let url = resolveURL(from: workspace) else { return }
+        
+        let ignoreRules = IgnoreRules(
+            respectGitIgnore: workspace.respectGitIgnore,
+            respectDotIgnore: workspace.respectDotIgnore,
+            showHiddenFiles: workspace.showHiddenFiles,
+            excludeNodeModules: workspace.excludeNodeModules,
+            excludeGit: workspace.excludeGit,
+            excludeBuild: workspace.excludeBuild,
+            excludeDist: workspace.excludeDist,
+            excludeNext: workspace.excludeNext,
+            excludeVenv: workspace.excludeVenv,
+            excludeDSStore: workspace.excludeDSStore,
+            excludeDerivedData: workspace.excludeDerivedData,
+            customPatterns: workspace.customIgnore.split(separator: "\n").map(String.init),
+            rootPath: url.path
+        )
+        
+        await fileTreeModel.refresh(ignoreRules: ignoreRules)
+        
+        // Re-establish file system change callback after refresh
+        fileTreeModel.onFileSystemChange = {
+            Task { @MainActor in
+                NotificationCenter.default.post(name: .fileSystemChanged, object: nil)
+                updateWorkspaceSelection()
+            }
+        }
+        
+        // Update workspace selection state after refresh
+        await MainActor.run {
+            updateWorkspaceSelection()
         }
     }
     
