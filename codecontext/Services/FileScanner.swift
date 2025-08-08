@@ -9,17 +9,48 @@ struct FileInfo: Identifiable {
 
 final class FileScanner {
     struct Options {
-        let followSymlinks: Bool = false
-        let maxFileSizeBytes: UInt64 = 5 * 1024 * 1024 // 5 MB sensible default
+        let followSymlinks: Bool
+        let maxFileSizeBytes: UInt64
         let ignoreRules: IgnoreRules
+        let enableExclusionDetection: Bool
+        let allowOverrides: Set<URL>
+        
+        init(
+            followSymlinks: Bool = false,
+            maxFileSizeBytes: UInt64 = 5 * 1024 * 1024,
+            ignoreRules: IgnoreRules,
+            enableExclusionDetection: Bool = true,
+            allowOverrides: Set<URL> = []
+        ) {
+            self.followSymlinks = followSymlinks
+            self.maxFileSizeBytes = maxFileSizeBytes
+            self.ignoreRules = ignoreRules
+            self.enableExclusionDetection = enableExclusionDetection
+            self.allowOverrides = allowOverrides
+        }
     }
+    
+    struct ScanResult {
+        let includedFiles: [FileInfo]
+        let exclusions: [ExclusionDetector.ExclusionResult]
+    }
+    
+    private let exclusionDetector = ExclusionDetector()
 
     func scan(root: URL, options: Options) -> [FileInfo] {
-        var results: [FileInfo] = []
+        let result = scanWithExclusions(root: root, options: options)
+        return result.includedFiles
+    }
+    
+    func scanWithExclusions(root: URL, options: Options) -> ScanResult {
+        var includedFiles: [FileInfo] = []
+        var exclusions: [ExclusionDetector.ExclusionResult] = []
+        
         let fm = FileManager.default
         guard let enumerator = fm.enumerator(at: root, includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey, .fileSizeKey], options: [.skipsPackageDescendants, .skipsHiddenFiles]) else {
-            return []
+            return ScanResult(includedFiles: [], exclusions: [])
         }
+        
         for case let fileURL as URL in enumerator {
             do {
                 let rv = try fileURL.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey, .fileSizeKey])
@@ -27,29 +58,49 @@ final class FileScanner {
                     enumerator.skipDescendants()
                     continue
                 }
+                
                 let isDir = rv.isDirectory ?? false
                 if options.ignoreRules.isIgnored(path: fileURL.path, isDirectory: isDir) {
                     if isDir { enumerator.skipDescendants() }
                     continue
                 }
+                
                 let size = UInt64(rv.fileSize ?? 0)
-                if !isDir && size > options.maxFileSizeBytes {
+                
+                // Skip directories, add them directly
+                if isDir {
+                    includedFiles.append(FileInfo(url: fileURL, isDirectory: true, size: size))
                     continue
                 }
-                // Very rough binary filter: skip non-UTF8
-                if !isDir {
-                    if let data = try? Data(contentsOf: fileURL), String(data: data, encoding: .utf8) == nil {
-                        continue
+                
+                // Check for exclusions if enabled
+                var shouldExclude = false
+                if options.enableExclusionDetection && !options.allowOverrides.contains(fileURL) {
+                    if let exclusion = exclusionDetector.checkForExclusion(url: fileURL, size: size) {
+                        exclusions.append(exclusion)
+                        shouldExclude = true
+                    }
+                } else {
+                    // Fallback to legacy exclusion logic
+                    if size > options.maxFileSizeBytes {
+                        shouldExclude = true
+                    } else if let data = try? Data(contentsOf: fileURL), String(data: data, encoding: .utf8) == nil {
+                        shouldExclude = true
                     }
                 }
-                results.append(FileInfo(url: fileURL, isDirectory: isDir, size: size))
+                
+                if !shouldExclude {
+                    includedFiles.append(FileInfo(url: fileURL, isDirectory: false, size: size))
+                }
+                
             } catch {
                 // Exclude unreadable entries silently per SPEC
                 continue
             }
         }
-        results.sort { $0.url.path < $1.url.path }
-        return results
+        
+        includedFiles.sort { $0.url.path < $1.url.path }
+        return ScanResult(includedFiles: includedFiles, exclusions: exclusions)
     }
 }
 
