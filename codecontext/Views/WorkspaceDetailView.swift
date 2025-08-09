@@ -177,7 +177,7 @@ private struct OutputHeader: View {
             Button(action: onGenerate) {
                 Label("Generate", systemImage: "doc.text")
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.glass)
             .disabled(isGenerating || selectedFileCount == 0)
             .help(selectedFileCount == 0 ? "Select files to generate XML" : "Generate XML for selected files")
         }
