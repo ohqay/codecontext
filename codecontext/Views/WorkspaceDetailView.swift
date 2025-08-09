@@ -49,8 +49,25 @@ struct WorkspaceDetailView: View {
             }
         }
         .toolbar {
-            ToolbarItemGroup(placement: .automatic) {
-                Button("Copy") { NotificationCenter.default.post(name: .requestCopyOutput, object: nil) }
+            ToolbarItemGroup(placement: .primaryAction) {
+                Button(action: { NotificationCenter.default.post(name: .requestCopyOutput, object: nil) }) {
+                    Image(systemName: "doc.on.doc")
+                        .font(.system(size: 16, weight: .regular))
+                }
+                .buttonStyle(.bordered)
+                .help("Copy XML Output")
+            }
+            
+            ToolbarItem(placement: .navigation) {
+                Button(action: { 
+                    // Find the focused workspace actions to toggle sidebar
+                    NotificationCenter.default.post(name: .toggleSidebar, object: nil)
+                }) {
+                    Image(systemName: "sidebar.leading")
+                        .font(.system(size: 16, weight: .regular))
+                }
+                .buttonStyle(.bordered)
+                .help("Toggle Sidebar")
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .requestCopyOutput)) { _ in

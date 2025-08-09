@@ -66,6 +66,9 @@ struct MainWindow: View {
                 try? modelContext.save()
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .toggleSidebar)) { _ in
+            toggleSidebar()
+        }
     }
 
     private func ensureDefaultPreference() {
@@ -135,4 +138,5 @@ extension Notification.Name {
     static let fileSystemChanged = Notification.Name("fileSystemChanged")
     static let selectionChanged = Notification.Name("selectionChanged")
     static let outlineViewNeedsRefresh = Notification.Name("outlineViewNeedsRefresh")
+    static let toggleSidebar = Notification.Name("toggleSidebar")
 }
