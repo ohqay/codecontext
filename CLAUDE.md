@@ -20,6 +20,17 @@
 - **Quality Time**: Take time to do it right the first time.
 - **Context**: Read README.md and TESTING.md for project context.
 
+## Code Refactoring & Maintainability
+
+When cleaning up code, refactoring, or addressing maintainability issues, prioritize eliminating duplication and complexity:
+
+- **DRY Above All**: Code duplication is unacceptable. If you're writing the same thing twice, extract it. This includes SwiftUI view structures, modifiers, logic patterns, and any repeated code blocks.
+- **Conditional Logic**: When conditionals only affect part of the implementation, isolate what changes and apply common elements once. Don't duplicate entire structures just to change one property.
+- **Component Extraction**: Turn one-off UI elements into reusable, parameterized components. What varies becomes parameters; what's constant stays in the component.
+- **Type Conflicts**: When Swift's type system fights you (like with ternary operators on different ButtonStyles), use ViewModifier or @ViewBuilder rather than duplicating code paths.
+- **Refactoring Triggers**: Look for copy-paste code, repeated modifier chains, similar function bodies with minor variations, and conditional branches that share most of their implementation.
+- **Clean Separation**: Separate what changes from what stays the same. Apply varying logic through parameters, modifiers, or extracted functions while keeping common behavior in one place.
+
 ## SwiftUI Architecture
 
 Follow **Intent-Driven Component Architecture**: Views should read like natural language describing the interface, not technical construction.
