@@ -44,11 +44,16 @@ final class FileNode: Identifiable, Hashable {
     // Recursively calculate aggregate token counts
     func updateAggregateTokens() {
         if isDirectory {
+            // First ensure all children have their aggregate counts updated
+            for child in children {
+                child.updateAggregateTokens()
+            }
+            // Then sum them up
             aggregateTokenCount = children.reduce(0) { $0 + $1.aggregateTokenCount }
         } else {
+            // For files, aggregate count is just the token count
             aggregateTokenCount = tokenCount
         }
-        parent?.updateAggregateTokens()
     }
     
     // Recursively get all selected files
@@ -188,6 +193,9 @@ final class FileTreeModel {
         
         // Update aggregate counts
         rootNode?.updateAggregateTokens()
+        
+        // Notify outline view that token values changed so visible rows update
+        NotificationCenter.default.post(name: .outlineViewNeedsRefresh, object: nil)
     }
     
     private func calculateTokensForNode(_ node: FileNode) async {
@@ -196,6 +204,7 @@ final class FileTreeModel {
               let fileSize = attrs[.size] as? Int,
               fileSize < AppConfiguration.maxFileSizeBytes else { // Skip files exceeding size limit
             node.tokenCount = 0
+            node.aggregateTokenCount = 0
             return
         }
         
@@ -210,6 +219,9 @@ final class FileTreeModel {
             let languageHint = LanguageMap.languageHint(for: node.url)
             return tokenizer.estimateTokens(content, languageHint: languageHint)
         }
+        
+        // For files, aggregate count equals token count
+        node.aggregateTokenCount = node.tokenCount
     }
     
     func updateSelection(_ node: FileNode) {
@@ -220,6 +232,8 @@ final class FileTreeModel {
     private func updateTotalSelectedTokens() {
         let selectedFiles = rootNode?.getSelectedFiles() ?? []
         totalSelectedTokens = selectedFiles.reduce(0) { $0 + $1.tokenCount }
+        // Also ensure aggregate counts are up to date
+        rootNode?.updateAggregateTokens()
     }
     
     // Restore selections from saved JSON data
@@ -357,6 +371,9 @@ final class FileTreeModel {
         }
         
         updateTotalSelectedTokens()
+        
+        // Ensure visible token labels are refreshed
+        NotificationCenter.default.post(name: .outlineViewNeedsRefresh, object: nil)
     }
     
     private func performIncrementalUpdate(modifiedFiles: [URL]) async {
@@ -391,5 +408,8 @@ final class FileTreeModel {
         }
         
         updateTotalSelectedTokens()
+        
+        // Make sure the tokens column updates for visible rows
+        NotificationCenter.default.post(name: .outlineViewNeedsRefresh, object: nil)
     }
 }

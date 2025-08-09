@@ -7,6 +7,7 @@ struct SidebarView: View {
 
     @Binding var selection: SDWorkspace?
     @Binding var filterFocused: Bool
+    @Binding var selectedTokenCount: Int
 
     @State private var filterText: String = ""
     @State private var showWorkspaceList = false
@@ -22,7 +23,7 @@ struct SidebarView: View {
                     FileTreeContainer(workspace: Binding(
                         get: { workspace },
                         set: { selection = $0 }
-                    ), filterText: $filterText)
+                    ), filterText: $filterText, selectedTokenCount: $selectedTokenCount)
                 }
             } else {
                 // Empty state - prompt to open folder

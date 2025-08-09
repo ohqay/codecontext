@@ -90,8 +90,9 @@ final class ProgressiveXMLGenerator {
             return nil
         }
         
-        // Generate final XML
-        return xml.render(codebaseRoot: codebaseRoot, files: entries, includeTree: includeTree)
+        // Generate final XML with all file paths for the tree
+        let allPaths = files.map { $0.url.path }
+        return xml.render(codebaseRoot: codebaseRoot, files: entries, includeTree: includeTree, allFilePaths: allPaths)
     }
     
     /// Process a single file asynchronously with proper memory management

@@ -152,7 +152,10 @@ final class WorkspaceEngine {
             notificationSystem.showExclusionNotification(exclusions: scanResult.exclusions)
         }
         
-        // Filter to only include selected files
+        // Keep track of all file paths for the full tree
+        let allFilePaths = scanResult.includedFiles.map { $0.url.path }
+        
+        // Filter to only include selected files for content
         let files = allFiles.filter { selectedFilePaths.contains($0.url.path) }
         
         // Prevent hanging on too many files
@@ -186,7 +189,7 @@ final class WorkspaceEngine {
             await Task.yield()
         }
 
-        let rendered = xml.render(codebaseRoot: root, files: entries, includeTree: includeTree)
+        let rendered = xml.render(codebaseRoot: root, files: entries, includeTree: includeTree, allFilePaths: allFilePaths)
         
         // Use standardized language-aware tokenization
         let xmlTokens = tokenizer.estimateTokens(rendered, languageHint: "xml")
@@ -222,6 +225,9 @@ final class WorkspaceEngine {
             return Output(xml: "No files selected", totalTokens: 0)
         }
         
+        // Get all file paths from the tree for the full structure
+        let allFilePaths = getAllFilePaths(from: fileTreeModel.rootNode)
+        
         var entries: [XMLFormatterService.FileEntry] = []
         var totalTokens = 0
         
@@ -239,7 +245,7 @@ final class WorkspaceEngine {
             totalTokens += fileNode.tokenCount
         }
         
-        let rendered = xml.render(codebaseRoot: root, files: entries, includeTree: includeTree)
+        let rendered = xml.render(codebaseRoot: root, files: entries, includeTree: includeTree, allFilePaths: allFilePaths)
         
         // Use standardized language-aware tokenization
         let xmlTokens = tokenizer.estimateTokens(rendered, languageHint: "xml")
@@ -263,6 +269,23 @@ final class WorkspaceEngine {
     }
     
     // MARK: - Private Helper Methods
+    
+    /// Get all file paths from the file tree recursively
+    private func getAllFilePaths(from node: FileNode?) -> [String] {
+        guard let node = node else { return [] }
+        
+        var paths: [String] = []
+        
+        func collectPaths(from currentNode: FileNode) {
+            paths.append(currentNode.url.path)
+            for child in currentNode.children {
+                collectPaths(from: child)
+            }
+        }
+        
+        collectPaths(from: node)
+        return paths
+    }
     
     /// Process a single file asynchronously with proper memory management
     private func processFileAsync(_ file: FileInfo) async -> XMLFormatterService.FileEntry? {

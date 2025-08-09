@@ -8,12 +8,14 @@ struct XMLFormatterService: Sendable {
         let contents: String
     }
 
-    func render(codebaseRoot: URL, files: [FileEntry], includeTree: Bool) -> String {
+    func render(codebaseRoot: URL, files: [FileEntry], includeTree: Bool, allFilePaths: [String]? = nil) -> String {
         var lines: [String] = []
         lines.append("<codebase>")
         if includeTree {
             lines.append("  <fileTree>")
-            lines.append(contentsOf: renderTree(root: codebaseRoot, files: files).map { "    " + $0 })
+            // If allFilePaths is provided, use it for the full tree; otherwise fall back to selected files
+            let treePaths = allFilePaths ?? files.map { $0.absolutePath }
+            lines.append(contentsOf: renderTreeFromPaths(root: codebaseRoot, paths: treePaths).map { "    " + $0 })
             lines.append("  </fileTree>")
         }
 
@@ -34,9 +36,20 @@ struct XMLFormatterService: Sendable {
     }
 
     private func renderTree(root: URL, files: [FileEntry]) -> [String] {
-        // Produce a simple ASCII tree for the included files only
-        let paths = files.map { URL(fileURLWithPath: $0.absolutePath) }
-        let relative = paths.compactMap { $0.path(percentEncoded: false).dropFirst(root.path.count + 1) }
+        // Legacy method - kept for compatibility
+        return renderTreeFromPaths(root: root, paths: files.map { $0.absolutePath })
+    }
+    
+    private func renderTreeFromPaths(root: URL, paths: [String]) -> [String] {
+        // Produce a simple ASCII tree for the provided paths
+        let urls = paths.map { URL(fileURLWithPath: $0) }
+        let relative = urls.compactMap { url -> String? in
+            let path = url.path(percentEncoded: false)
+            if path.hasPrefix(root.path) {
+                return String(path.dropFirst(root.path.count + 1))
+            }
+            return nil
+        }
         let components = relative.map { $0.split(separator: "/").map(String.init) }
         var tree: [String] = []
         func add(level: Int, prefix: String, items: [[String]]) {

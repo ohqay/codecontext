@@ -4,8 +4,9 @@ import AppKit
 
 @Observable
 final class AppState {
-    var includeFileTreeInOutput: Bool = false
+    var includeFileTreeInOutput: Bool = true
     var currentWorkspace: SDWorkspace?
+    var selectedTokenCount: Int = 0
 }
 
 struct MainWindow: View {
@@ -22,7 +23,11 @@ struct MainWindow: View {
 
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
-            SidebarView(selection: $selection, filterFocused: $filterFocused)
+            SidebarView(selection: $selection, filterFocused: $filterFocused, selectedTokenCount: Binding(
+                get: { appState.selectedTokenCount },
+                set: { appState.selectedTokenCount = $0 }
+            ))
+            .navigationSplitViewColumnWidth(min: 280, ideal: 400, max: 600)
         } detail: {
             if let selectedWorkspace = selection {
                 WorkspaceDetailView(
@@ -30,6 +35,10 @@ struct MainWindow: View {
                     includeFileTree: Binding(
                         get: { appState.includeFileTreeInOutput },
                         set: { appState.includeFileTreeInOutput = $0 }
+                    ),
+                    selectedTokenCount: Binding(
+                        get: { appState.selectedTokenCount },
+                        set: { appState.selectedTokenCount = $0 }
                     )
                 )
             } else {

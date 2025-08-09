@@ -3,6 +3,7 @@ import SwiftUI
 struct WorkspaceDetailView: View {
     let workspace: SDWorkspace
     @Binding var includeFileTree: Bool
+    @Binding var selectedTokenCount: Int
 
     @Environment(\.modelContext) private var modelContext
     @Environment(NotificationSystem.self) private var notificationSystem
@@ -22,6 +23,7 @@ struct WorkspaceDetailView: View {
                 includeFileTree: $includeFileTree,
                 isGenerating: isGenerating,
                 selectedFileCount: selectedFileCount,
+                selectedTokenCount: selectedTokenCount,
                 onGenerate: { scheduleRegeneration() }
             )
             Divider()
@@ -48,12 +50,6 @@ struct WorkspaceDetailView: View {
         }
         .toolbar {
             ToolbarItemGroup(placement: .automatic) {
-                HStack(spacing: 8) {
-                    Image(systemName: "number.square")
-                    Text("Tokens: \(totalTokens)").font(.callout.monospacedDigit())
-                }
-                .padding(6)
-                .background(.quaternary, in: Capsule())
                 Button("Copy") { NotificationCenter.default.post(name: .requestCopyOutput, object: nil) }
             }
         }
@@ -149,6 +145,7 @@ private struct OutputHeader: View {
     @Binding var includeFileTree: Bool
     let isGenerating: Bool
     let selectedFileCount: Int
+    let selectedTokenCount: Int
     let onGenerate: () -> Void
     
     var body: some View {
@@ -158,9 +155,18 @@ private struct OutputHeader: View {
             Spacer()
             
             if selectedFileCount > 0 {
-                Text("\(selectedFileCount) files selected")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                HStack(spacing: 12) {
+                    Text("\(selectedFileCount) files selected")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    
+                    Divider()
+                        .frame(height: 14)
+                    
+                    Text("Tokens: \(selectedTokenCount)")
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
             }
             
             Button(action: onGenerate) {

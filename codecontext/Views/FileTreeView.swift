@@ -55,19 +55,12 @@ struct FileTreeView: NSViewRepresentable {
         outlineView.delegate = context.coordinator
         outlineView.dataSource = context.coordinator
         outlineView.headerView = nil
-        outlineView.rowSizeStyle = .default
+        outlineView.rowSizeStyle = .medium
         outlineView.autoresizesOutlineColumn = false
-        outlineView.indentationPerLevel = 16
+        outlineView.indentationPerLevel = 24
         outlineView.columnAutoresizingStyle = .uniformColumnAutoresizingStyle
         
-        // Create columns
-        let checkColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("checkbox"))
-        checkColumn.title = ""
-        checkColumn.width = 30
-        checkColumn.minWidth = 30
-        checkColumn.maxWidth = 30
-        outlineView.addTableColumn(checkColumn)
-        
+        // Create columns - reordered: name, tokens, checkbox
         let nameColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("name"))
         nameColumn.title = "File"
         nameColumn.width = 200
@@ -82,10 +75,17 @@ struct FileTreeView: NSViewRepresentable {
         tokenColumn.maxWidth = 120
         outlineView.addTableColumn(tokenColumn)
         
+        let checkColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("checkbox"))
+        checkColumn.title = ""
+        checkColumn.width = 30
+        checkColumn.minWidth = 30
+        checkColumn.maxWidth = 30
+        outlineView.addTableColumn(checkColumn)
+        
         scrollView.documentView = outlineView
         scrollView.hasVerticalScroller = true
-        scrollView.hasHorizontalScroller = false
-        scrollView.autohidesScrollers = false
+        scrollView.hasHorizontalScroller = true
+        scrollView.autohidesScrollers = true
         
         // Set up spacebar handler
         outlineView.onSpacebarPressed = context.coordinator.handleSpacebarPress
@@ -114,12 +114,16 @@ struct FileTreeView: NSViewRepresentable {
         switch updateType {
         case .fullReload:
             performFullReload(outlineView: outlineView, coordinator: coordinator)
+            // After a full reload, ensure token labels reflect latest counts
+            coordinator.refreshTokenCounts(in: outlineView)
         case .filterChange:
             performFilterUpdate(outlineView: outlineView, coordinator: coordinator)
+            coordinator.refreshTokenCounts(in: outlineView)
         case .selectionOnly:
             performSelectionUpdate(outlineView: outlineView, coordinator: coordinator)
         case .expansionOnly:
             performExpansionUpdate(outlineView: outlineView, coordinator: coordinator)
+            coordinator.refreshTokenCounts(in: outlineView)
         case .none:
             break // No update needed
         }
@@ -251,7 +255,7 @@ struct FileTreeView: NSViewRepresentable {
         if filter.isEmpty { return false }
         
         // Check if the directory name itself matches
-        if node.name.localizedStandardContains(filter) || 
+        if node.name.localizedStandardContains(filter) ||
            node.url.path.localizedStandardContains(filter) {
             return true
         }
@@ -263,7 +267,7 @@ struct FileTreeView: NSViewRepresentable {
                     return true
                 }
             } else {
-                if child.name.localizedStandardContains(filter) || 
+                if child.name.localizedStandardContains(filter) ||
                    child.url.path.localizedStandardContains(filter) {
                     return true
                 }
@@ -303,7 +307,11 @@ struct FileTreeView: NSViewRepresentable {
             DispatchQueue.main.async { [weak self] in
                 guard let self = self, let outlineView = self.outlineView else { return }
                 
-                // Use selective refresh instead of full reload
+                // Ensure aggregate token counts are up to date
+                self.parent.fileTreeModel.rootNode?.updateAggregateTokens()
+                
+                // Update token labels for visible rows and keep selections in sync
+                self.refreshTokenCounts(in: outlineView)
                 self.refreshSelectionStates(in: outlineView)
             }
         }
@@ -362,7 +370,7 @@ struct FileTreeView: NSViewRepresentable {
                     return hasMatchingDescendant(child, filter: filterText)
                 } else {
                     // For files, match against filename or path
-                    return child.name.localizedStandardContains(filterText) || 
+                    return child.name.localizedStandardContains(filterText) ||
                            child.url.path.localizedStandardContains(filterText)
                 }
             }
@@ -411,7 +419,7 @@ struct FileTreeView: NSViewRepresentable {
             let container = NSView()
             
             let imageView = NSImageView()
-            imageView.image = node.isDirectory ? 
+            imageView.image = node.isDirectory ?
                 NSImage(systemSymbolName: "folder", accessibilityDescription: "Folder") :
                 NSImage(systemSymbolName: "doc", accessibilityDescription: "File")
             imageView.translatesAutoresizingMaskIntoConstraints = false
@@ -428,8 +436,8 @@ struct FileTreeView: NSViewRepresentable {
             NSLayoutConstraint.activate([
                 imageView.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 4),
                 imageView.centerYAnchor.constraint(equalTo: container.centerYAnchor),
-                imageView.widthAnchor.constraint(equalToConstant: 16),
-                imageView.heightAnchor.constraint(equalToConstant: 16),
+                imageView.widthAnchor.constraint(equalToConstant: 20),
+                imageView.heightAnchor.constraint(equalToConstant: 20),
                 
                 textField.leadingAnchor.constraint(equalTo: imageView.trailingAnchor, constant: 4),
                 textField.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -4),
@@ -440,20 +448,45 @@ struct FileTreeView: NSViewRepresentable {
         }
         
         private func makeTokenView(for node: FileNode) -> NSView {
-            let tokenCount = node.isDirectory ? node.aggregateTokenCount : node.tokenCount
-            let textField = NSTextField(labelWithString: formatTokenCount(tokenCount))
+            let container = NSView()
+            
+            // Always use aggregateTokenCount which includes the sum for directories
+            let tokenCount = node.aggregateTokenCount
+            let formattedString = formatTokenCount(tokenCount)
+            
+            let textField = NSTextField(labelWithString: formattedString)
             textField.font = .monospacedDigitSystemFont(ofSize: 12, weight: .regular)
             textField.alignment = .right
             textField.textColor = .secondaryLabelColor
-            return textField
+            textField.translatesAutoresizingMaskIntoConstraints = false
+            
+            container.addSubview(textField)
+            NSLayoutConstraint.activate([
+                textField.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 4),
+                textField.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -4),
+                textField.centerYAnchor.constraint(equalTo: container.centerYAnchor)
+            ])
+            
+            return container
         }
         
         private func formatTokenCount(_ count: Int) -> String {
             if count == 0 { return "" }
-            if count < 1000 { return "\(count)" }
-            if count < 10000 { return String(format: "%.1fk", Double(count) / 1000) }
-            if count < 1000000 { return "\(count / 1000)k" }
-            return String(format: "%.1fM", Double(count) / 1000000)
+            // Always use "k" notation for consistency
+            let thousands = Double(count) / 1000.0
+            if thousands < 1.0 {
+                // For values less than 1000, show with 2 decimal places
+                return String(format: "%.2fk", thousands)
+            } else if thousands < 10.0 {
+                // For 1k-10k, show with 1 decimal place
+                return String(format: "%.1fk", thousands)
+            } else if thousands < 1000.0 {
+                // For 10k-999k, show as integer
+                return String(format: "%.0fk", thousands)
+            } else {
+                // For 1M+, switch to M notation
+                return String(format: "%.1fM", Double(count) / 1000000)
+            }
         }
         
         @objc private func checkboxToggled(_ sender: NSButton) {
@@ -486,13 +519,28 @@ struct FileTreeView: NSViewRepresentable {
             }
         }
         
+        /// Refresh token labels for all visible rows (tokens column index = 1)
+        func refreshTokenCounts(in outlineView: NSOutlineView) {
+            for row in 0..<outlineView.numberOfRows {
+                guard let node = outlineView.item(atRow: row) as? FileNode else { continue }
+                
+                if let tokenView = outlineView.view(atColumn: 1, row: row, makeIfNecessary: false),
+                   let label = tokenView.subviews.first as? NSTextField {
+                    let display = formatTokenCount(node.aggregateTokenCount)
+                    if label.stringValue != display {
+                        label.stringValue = display
+                    }
+                }
+            }
+        }
+        
         /// Refresh selection state for a specific node and its children
         private func refreshSelectionStatesForNode(_ node: FileNode, in outlineView: NSOutlineView, row: Int? = nil) {
             let nodeRow = row ?? outlineView.row(forItem: node)
             guard nodeRow >= 0 else { return }
             
-            // Update the checkbox in the first column
-            if let checkboxView = outlineView.view(atColumn: 0, row: nodeRow, makeIfNecessary: false),
+            // Update the checkbox in the last column (column 2 after reordering)
+            if let checkboxView = outlineView.view(atColumn: 2, row: nodeRow, makeIfNecessary: false),
                let checkbox = checkboxView.subviews.first as? NSButton {
                 let newState: NSControl.StateValue = node.isSelected ? .on : .off
                 if checkbox.state != newState {
@@ -606,6 +654,7 @@ struct FileTreeContainer: View {
     @State private var fileTreeModel = FileTreeModel()
     @Binding var workspace: SDWorkspace
     @Binding var filterText: String
+    @Binding var selectedTokenCount: Int
     
     var body: some View {
         FileTreeView(
@@ -652,6 +701,9 @@ struct FileTreeContainer: View {
         
         await fileTreeModel.loadDirectory(at: url, ignoreRules: ignoreRules)
         
+        // Initialize token count to 0 when loading
+        selectedTokenCount = 0
+        
         // Set up file system change notification
         fileTreeModel.onFileSystemChange = {
             Task { @MainActor in
@@ -684,6 +736,8 @@ struct FileTreeContainer: View {
             fileTreeModel.updateSelection(node)
             // Update workspace selection state
             updateWorkspaceSelection()
+            // Update token count for real-time display
+            selectedTokenCount = fileTreeModel.totalSelectedTokens
         }
     }
     
@@ -720,6 +774,8 @@ struct FileTreeContainer: View {
         // Update workspace selection state after refresh
         await MainActor.run {
             updateWorkspaceSelection()
+            // Update token count after refresh
+            selectedTokenCount = fileTreeModel.totalSelectedTokens
         }
     }
     
