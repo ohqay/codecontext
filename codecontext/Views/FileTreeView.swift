@@ -24,6 +24,26 @@ struct FileTreeView: NSViewRepresentable {
     @Binding var filterText: String
     let onSelectionChange: (FileNode) -> Void
     
+    // Internal state tracking for selective updates
+    struct StateSnapshot: Equatable {
+        let rootNodeId: UUID?
+        let filterText: String
+        let allNodeIds: Set<UUID>
+        let selectedNodeIds: Set<UUID>
+        let expandedNodeIds: Set<UUID>
+        
+        static func from(fileTreeModel: FileTreeModel, filterText: String) -> StateSnapshot {
+            let allNodes = fileTreeModel.allNodes
+            return StateSnapshot(
+                rootNodeId: fileTreeModel.rootNode?.id,
+                filterText: filterText.trimmingCharacters(in: .whitespacesAndNewlines),
+                allNodeIds: Set(allNodes.map { $0.id }),
+                selectedNodeIds: Set(allNodes.filter { $0.isSelected }.map { $0.id }),
+                expandedNodeIds: Set(allNodes.filter { $0.isExpanded }.map { $0.id })
+            )
+        }
+    }
+    
     func makeCoordinator() -> Coordinator {
         Coordinator(self)
     }
@@ -78,17 +98,138 @@ struct FileTreeView: NSViewRepresentable {
     func updateNSView(_ nsView: NSScrollView, context: Context) {
         guard let outlineView = nsView.documentView as? NSOutlineView else { return }
         
-        context.coordinator.parent = self
+        let coordinator = context.coordinator
+        coordinator.parent = self
+        
+        // Create snapshots to detect what changed
+        let currentSnapshot = StateSnapshot.from(fileTreeModel: fileTreeModel, filterText: filterText)
+        let previousSnapshot = coordinator.lastSnapshot
+        
+        // Store current snapshot for next update
+        coordinator.lastSnapshot = currentSnapshot
+        
+        // Determine what type of update is needed
+        let updateType = determineUpdateType(current: currentSnapshot, previous: previousSnapshot)
+        
+        switch updateType {
+        case .fullReload:
+            performFullReload(outlineView: outlineView, coordinator: coordinator)
+        case .filterChange:
+            performFilterUpdate(outlineView: outlineView, coordinator: coordinator)
+        case .selectionOnly:
+            performSelectionUpdate(outlineView: outlineView, coordinator: coordinator)
+        case .expansionOnly:
+            performExpansionUpdate(outlineView: outlineView, coordinator: coordinator)
+        case .none:
+            break // No update needed
+        }
+    }
+    
+    private enum UpdateType {
+        case fullReload
+        case filterChange
+        case selectionOnly
+        case expansionOnly
+        case none
+    }
+    
+    private func determineUpdateType(current: StateSnapshot, previous: StateSnapshot?) -> UpdateType {
+        guard let previous = previous else {
+            return .fullReload // First time setup
+        }
+        
+        // If root changed or nodes were added/removed, full reload needed
+        if current.rootNodeId != previous.rootNodeId ||
+           current.allNodeIds != previous.allNodeIds {
+            return .fullReload
+        }
+        
+        // If filter changed, need to refresh visible items and expansion
+        if current.filterText != previous.filterText {
+            return .filterChange
+        }
+        
+        // If only selections changed, update checkboxes
+        if current.selectedNodeIds != previous.selectedNodeIds {
+            return .selectionOnly
+        }
+        
+        // If only expansions changed, update expansion states
+        if current.expandedNodeIds != previous.expandedNodeIds {
+            return .expansionOnly
+        }
+        
+        return .none
+    }
+    
+    private func performFullReload(outlineView: NSOutlineView, coordinator: Coordinator) {
+        // Preserve scroll position during reload
+        let scrollPosition = (outlineView.enclosingScrollView?.documentVisibleRect.origin.y) ?? 0
+        
         outlineView.reloadData()
         
-        // Expand root by default and auto-expand when filtering
+        // Expand root and apply filtering
         if let root = fileTreeModel.rootNode {
             outlineView.expandItem(root)
             
-            // If we have a filter, expand all matching directories to show results
             if !filterText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 expandMatchingItems(outlineView, node: root)
+            } else {
+                // Restore previous expansion states
+                restoreExpansionStates(outlineView: outlineView, coordinator: coordinator)
             }
+        }
+        
+        // Restore scroll position
+        if scrollPosition > 0 {
+            DispatchQueue.main.async {
+                outlineView.enclosingScrollView?.documentView?.scroll(NSPoint(x: 0, y: scrollPosition))
+            }
+        }
+    }
+    
+    private func performFilterUpdate(outlineView: NSOutlineView, coordinator: Coordinator) {
+        // Save expanded items before filter change
+        let expandedItems = coordinator.getExpandedItems(in: outlineView)
+        
+        outlineView.reloadData()
+        
+        if let root = fileTreeModel.rootNode {
+            outlineView.expandItem(root)
+            
+            if !filterText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                expandMatchingItems(outlineView, node: root)
+            } else {
+                // Restore previous expansion states when clearing filter
+                restoreExpandedItems(outlineView: outlineView, expandedItems: expandedItems)
+            }
+        }
+    }
+    
+    private func performSelectionUpdate(outlineView: NSOutlineView, coordinator: Coordinator) {
+        // Update only the checkbox views for changed selections
+        coordinator.refreshSelectionStates(in: outlineView)
+    }
+    
+    private func performExpansionUpdate(outlineView: NSOutlineView, coordinator: Coordinator) {
+        // Update expansion states without full reload
+        coordinator.updateExpansionStates(in: outlineView)
+    }
+    
+    private func restoreExpansionStates(outlineView: NSOutlineView, coordinator: Coordinator) {
+        guard let lastSnapshot = coordinator.lastSnapshot else { return }
+        
+        // Find nodes to expand based on their IDs
+        for nodeId in lastSnapshot.expandedNodeIds {
+            if let node = fileTreeModel.allNodes.first(where: { $0.id == nodeId }) {
+                outlineView.expandItem(node)
+            }
+        }
+    }
+    
+    private func restoreExpandedItems(outlineView: NSOutlineView, expandedItems: [FileNode]) {
+        for item in expandedItems {
+            outlineView.expandItem(item)
         }
     }
     
@@ -136,9 +277,35 @@ struct FileTreeView: NSViewRepresentable {
         var parent: FileTreeView
         weak var outlineView: NSOutlineView?
         private var currentPreviewFile: FileNode?
+        var lastSnapshot: StateSnapshot?
+        private var isUpdatingProgrammatically = false
         
         init(_ parent: FileTreeView) {
             self.parent = parent
+            super.init()
+            setupNotificationObservers()
+        }
+        
+        deinit {
+            NotificationCenter.default.removeObserver(self)
+        }
+        
+        private func setupNotificationObservers() {
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(handleOutlineViewRefresh),
+                name: .outlineViewNeedsRefresh,
+                object: nil
+            )
+        }
+        
+        @objc private func handleOutlineViewRefresh() {
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self, let outlineView = self.outlineView else { return }
+                
+                // Use selective refresh instead of full reload
+                self.refreshSelectionStates(in: outlineView)
+            }
         }
         
         func handleSpacebarPress(_ item: Any?) {
@@ -290,15 +457,102 @@ struct FileTreeView: NSViewRepresentable {
         }
         
         @objc private func checkboxToggled(_ sender: NSButton) {
+            // Prevent UI update loops during programmatic changes
+            guard !isUpdatingProgrammatically else { return }
+            
             // Find the node by iterating through visible items
             for row in 0..<outlineView!.numberOfRows {
                 if let node = outlineView!.item(atRow: row) as? FileNode,
                    node.hashValue == sender.tag {
                     parent.onSelectionChange(node)
-                    outlineView?.reloadItem(node, reloadChildren: true)
+                    // Use selective update instead of full reload
+                    refreshSelectionStatesForNode(node, in: outlineView!)
                     break
                 }
             }
+        }
+        
+        // MARK: - Selective Update Methods
+        
+        /// Refresh selection states for all visible checkboxes without full reload
+        func refreshSelectionStates(in outlineView: NSOutlineView) {
+            isUpdatingProgrammatically = true
+            defer { isUpdatingProgrammatically = false }
+            
+            for row in 0..<outlineView.numberOfRows {
+                if let node = outlineView.item(atRow: row) as? FileNode {
+                    refreshSelectionStatesForNode(node, in: outlineView, row: row)
+                }
+            }
+        }
+        
+        /// Refresh selection state for a specific node and its children
+        private func refreshSelectionStatesForNode(_ node: FileNode, in outlineView: NSOutlineView, row: Int? = nil) {
+            let nodeRow = row ?? outlineView.row(forItem: node)
+            guard nodeRow >= 0 else { return }
+            
+            // Update the checkbox in the first column
+            if let checkboxView = outlineView.view(atColumn: 0, row: nodeRow, makeIfNecessary: false),
+               let checkbox = checkboxView.subviews.first as? NSButton {
+                let newState: NSControl.StateValue = node.isSelected ? .on : .off
+                if checkbox.state != newState {
+                    checkbox.state = newState
+                }
+            }
+            
+            // If this is a directory and it's expanded, update its children
+            if node.isDirectory && outlineView.isItemExpanded(node) {
+                for child in node.children {
+                    let childRow = outlineView.row(forItem: child)
+                    if childRow >= 0 {
+                        refreshSelectionStatesForNode(child, in: outlineView, row: childRow)
+                    }
+                }
+            }
+        }
+        
+        /// Update expansion states without full reload
+        func updateExpansionStates(in outlineView: NSOutlineView) {
+            guard lastSnapshot != nil else { return }
+            
+            // Get current expansion states from model
+            let shouldBeExpanded = Set(parent.fileTreeModel.allNodes.filter { $0.isExpanded }.map { $0.id })
+            
+            // Compare with what should be expanded and update accordingly
+            for node in parent.fileTreeModel.allNodes.filter({ $0.isDirectory }) {
+                let isCurrentlyExpanded = outlineView.isItemExpanded(node)
+                let shouldExpand = shouldBeExpanded.contains(node.id)
+                
+                if isCurrentlyExpanded != shouldExpand {
+                    if shouldExpand {
+                        outlineView.expandItem(node)
+                    } else {
+                        outlineView.collapseItem(node)
+                    }
+                }
+            }
+        }
+        
+        /// Get list of currently expanded items
+        func getExpandedItems(in outlineView: NSOutlineView) -> [FileNode] {
+            var expandedItems: [FileNode] = []
+            
+            func collectExpanded(node: FileNode) {
+                if outlineView.isItemExpanded(node) {
+                    expandedItems.append(node)
+                }
+                for child in node.children {
+                    if child.isDirectory {
+                        collectExpanded(node: child)
+                    }
+                }
+            }
+            
+            if let root = parent.fileTreeModel.rootNode {
+                collectExpanded(node: root)
+            }
+            
+            return expandedItems
         }
         
         func outlineView(_ outlineView: NSOutlineView, shouldSelectItem item: Any) -> Bool {
@@ -307,12 +561,18 @@ struct FileTreeView: NSViewRepresentable {
         
         func outlineViewItemDidExpand(_ notification: Notification) {
             guard let node = notification.userInfo?["NSObject"] as? FileNode else { return }
-            node.isExpanded = true
+            // Use async update to prevent synchronization issues
+            DispatchQueue.main.async {
+                node.isExpanded = true
+            }
         }
         
         func outlineViewItemDidCollapse(_ notification: Notification) {
             guard let node = notification.userInfo?["NSObject"] as? FileNode else { return }
-            node.isExpanded = false
+            // Use async update to prevent synchronization issues
+            DispatchQueue.main.async {
+                node.isExpanded = false
+            }
         }
         
         // MARK: - QLPreviewPanelDataSource
@@ -387,6 +647,9 @@ struct FileTreeContainer: View {
             rootPath: url.path
         )
         
+        // Clear previous selections when loading a new directory
+        workspace.selectionJSON = "{}"
+        
         await fileTreeModel.loadDirectory(at: url, ignoreRules: ignoreRules)
         
         // Set up file system change notification
@@ -400,12 +663,8 @@ struct FileTreeContainer: View {
             }
         }
         
-        // Restore saved selections after loading the directory
-        if !workspace.selectionJSON.isEmpty {
-            await MainActor.run {
-                fileTreeModel.restoreSelections(from: workspace.selectionJSON)
-            }
-        }
+        // Don't restore selections on fresh load - start with clean slate
+        // User can explicitly restore if needed
     }
     
     private func resolveURL(from workspace: SDWorkspace) -> URL? {
@@ -420,9 +679,12 @@ struct FileTreeContainer: View {
     }
     
     private func handleSelectionChange(_ node: FileNode) {
-        fileTreeModel.updateSelection(node)
-        // Update workspace selection state
-        updateWorkspaceSelection()
+        // Use async update to prevent race conditions with UI updates
+        Task { @MainActor in
+            fileTreeModel.updateSelection(node)
+            // Update workspace selection state
+            updateWorkspaceSelection()
+        }
     }
     
     
@@ -468,7 +730,11 @@ struct FileTreeContainer: View {
         // Convert to JSON for storage
         if let data = try? JSONEncoder().encode(selectedPaths),
            let json = String(data: data, encoding: .utf8) {
-            workspace.selectionJSON = json
+            // Only update if actually changed
+            if workspace.selectionJSON != json {
+                workspace.selectionJSON = json
+            }
         }
     }
+    
 }
