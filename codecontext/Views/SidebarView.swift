@@ -81,7 +81,12 @@ private struct SidebarToolbar: ToolbarContent {
         ToolbarItem(placement: .automatic) {
             Button(action: { 
                 if let workspace = FolderPicker.openFolder(modelContext: modelContext) {
-                    selection = workspace
+                    // Force SwiftData to refresh
+                    try? modelContext.save()
+                    // Small delay to ensure SwiftData updates
+                    DispatchQueue.main.async {
+                        selection = workspace
+                    }
                 }
             }) {
                 Image(systemName: "folder.badge.plus")

@@ -46,7 +46,7 @@ struct MainWindow: View {
                     )
                 )
             } else {
-                EmptySelectionView()
+                EmptySelectionView(selection: $selection)
             }
         }
         .focusedValue(
@@ -78,6 +78,7 @@ struct MainWindow: View {
             configureWindowForTabs()
         }
         .onChange(of: selection) { _, newWorkspace in
+            print("MainWindow: Selection changed to \(newWorkspace?.name ?? "nil")")
             appState.currentWorkspace = newWorkspace
             if let workspace = newWorkspace {
                 workspace.lastOpenedAt = .now
@@ -119,7 +120,12 @@ struct MainWindow: View {
 
     private func openFolder() {
         if let workspace = FolderPicker.openFolder(modelContext: modelContext) {
-            selection = workspace
+            // Force SwiftData to refresh by saving context first
+            try? modelContext.save()
+            // Small delay to ensure SwiftData updates
+            DispatchQueue.main.async {
+                selection = workspace
+            }
         }
     }
 
@@ -140,6 +146,7 @@ struct MainWindow: View {
 
 private struct EmptySelectionView: View {
     @Environment(\.modelContext) private var modelContext
+    @Binding var selection: SDWorkspace?
 
     var body: some View {
         ContentPlaceholder {
@@ -150,7 +157,14 @@ private struct EmptySelectionView: View {
                     hint: "⌘O",
                     isProminent: true,
                     action: {
-                        _ = FolderPicker.openFolder(modelContext: modelContext)
+                        if let workspace = FolderPicker.openFolder(modelContext: modelContext) {
+                            // Force SwiftData to refresh
+                            try? modelContext.save()
+                            // Small delay to ensure SwiftData updates
+                            DispatchQueue.main.async {
+                                selection = workspace
+                            }
+                        }
                     }
                 )
             }

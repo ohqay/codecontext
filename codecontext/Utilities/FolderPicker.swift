@@ -20,6 +20,7 @@ enum FolderPicker {
                     // Update last opened date for existing workspace
                     existingWorkspace.lastOpenedAt = .now
                     try modelContext.save()
+                    print("FolderPicker: Returning existing workspace for \(url.path)")
                     return existingWorkspace
                 } else {
                     // Create new workspace
@@ -28,6 +29,7 @@ enum FolderPicker {
                     let ws = SDWorkspace(name: name, originalPath: url.path, bookmark: bookmark)
                     modelContext.insert(ws)
                     try modelContext.save()
+                    print("FolderPicker: Created new workspace for \(url.path)")
                     return ws
                 }
             } catch {
