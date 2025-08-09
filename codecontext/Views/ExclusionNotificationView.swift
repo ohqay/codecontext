@@ -31,7 +31,7 @@ struct ExclusionNotificationView: View {
                     Button("Include") {
                         onInclude()
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.glass)
                     .controlSize(.small)
                     
                     Button(action: onDismiss) {

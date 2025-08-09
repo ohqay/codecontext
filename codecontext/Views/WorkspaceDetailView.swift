@@ -40,7 +40,7 @@ struct WorkspaceDetailView: View {
                         regenerationTask?.cancel()
                         isGenerating = false
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.glass)
                 }
                 .padding()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -54,7 +54,7 @@ struct WorkspaceDetailView: View {
                     Image(systemName: "doc.on.doc")
                         .font(.system(size: 16, weight: .regular))
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.glass)
                 .help("Copy XML Output")
             }
         }
