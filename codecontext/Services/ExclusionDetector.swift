@@ -5,8 +5,8 @@ final class ExclusionDetector {
     
     // MARK: - Constants
     
-    private static let MAX_FILE_SIZE_BYTES: UInt64 = 5 * 1024 * 1024 // 5 MB
-    private static let MAX_SAMPLE_SIZE = 1024 // Read first 1KB to check for binary content
+    private static let MAX_FILE_SIZE_BYTES: UInt64 = AppConfiguration.maxFileSizeBytes
+    private static let MAX_SAMPLE_SIZE = AppConfiguration.maxSampleSizeBytes // Read first 1KB to check for binary content
     
     // MARK: - Exclusion Types
     

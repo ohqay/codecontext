@@ -6,10 +6,14 @@ final class WorkspaceEngine {
     private let tokenizer: Tokenizer
     private let scanner = FileScanner()
     private let xml = XMLFormatterService()
+    private let progressiveGenerator = ProgressiveXMLGenerator()
     private let notificationSystem: NotificationSystem
     
     // Callback for when workspace content changes
     var onContentChange: (() -> Void)?
+    
+    // Cache for token counts to avoid re-tokenizing
+    private var tokenCache: [URL: Int] = [:]
     
     // Cache the last generation result for comparison
     private var lastOutput: Output?
@@ -45,6 +49,69 @@ final class WorkspaceEngine {
         }
     }
 
+    func generateWithProgress(
+        for workspace: SDWorkspace,
+        modelContext: ModelContext,
+        includeTree: Bool,
+        onProgress: @escaping (Int, Int) -> Void
+    ) async -> Output? {
+        guard let root = resolveURL(from: workspace) else { return nil }
+
+        let rules = IgnoreRules(
+            respectGitIgnore: workspace.respectGitIgnore,
+            respectDotIgnore: workspace.respectDotIgnore,
+            showHiddenFiles: workspace.showHiddenFiles,
+            excludeNodeModules: workspace.excludeNodeModules,
+            excludeGit: workspace.excludeGit,
+            excludeBuild: workspace.excludeBuild,
+            excludeDist: workspace.excludeDist,
+            excludeNext: workspace.excludeNext,
+            excludeVenv: workspace.excludeVenv,
+            excludeDSStore: workspace.excludeDSStore,
+            excludeDerivedData: workspace.excludeDerivedData,
+            customPatterns: workspace.customIgnore.split(separator: "\n").map(String.init),
+            rootPath: root.path
+        )
+        
+        // Parse selected files
+        let selectedFilePaths: Set<String>
+        if let selectionData = workspace.selectionJSON.data(using: .utf8),
+           let decodedPaths = try? JSONDecoder().decode(Set<String>.self, from: selectionData) {
+            selectedFilePaths = decodedPaths
+        } else {
+            selectedFilePaths = Set()
+        }
+        
+        // Quick return if no files selected
+        guard !selectedFilePaths.isEmpty else {
+            return Output(xml: "No files selected. Please select files from the sidebar.", totalTokens: 0)
+        }
+        
+        let options = FileScanner.Options(
+            ignoreRules: rules,
+            enableExclusionDetection: true,
+            allowOverrides: overrideFiles
+        )
+        let scanResult = scanner.scanWithExclusions(root: root, options: options)
+        
+        // Use progressive generator
+        let xml = await progressiveGenerator.generateProgressive(
+            codebaseRoot: root,
+            files: scanResult.includedFiles,
+            selectedPaths: selectedFilePaths,
+            includeTree: includeTree
+        ) { progress in
+            onProgress(progress.current, progress.total)
+        }
+        
+        guard let xmlString = xml else {
+            return nil // Cancelled
+        }
+        
+        let tokenCount = tokenizer.estimateTokens(xmlString, languageHint: "xml")
+        return Output(xml: xmlString, totalTokens: tokenCount)
+    }
+    
     func generate(for workspace: SDWorkspace, modelContext: ModelContext, includeTree: Bool) async -> Output? {
         guard let root = resolveURL(from: workspace) else { return nil }
 
@@ -87,42 +154,51 @@ final class WorkspaceEngine {
         
         // Filter to only include selected files
         let files = allFiles.filter { selectedFilePaths.contains($0.url.path) }
+        
+        // Prevent hanging on too many files
+        guard files.count <= AppConfiguration.maxProcessableFiles else {
+            return Output(xml: "Too many files selected (\(files.count)). Please select fewer files.", totalTokens: 0)
+        }
 
         var entries: [XMLFormatterService.FileEntry] = []
-        var totalTokens = 0
-        for file in files {
-            guard let data = try? Data(contentsOf: file.url), let content = String(data: data, encoding: .utf8) else { continue }
-            do {
-                let tokens = try await tokenizer.countTokens(content)
-                totalTokens += tokens
-            } catch {
-                print("Warning: Failed to count tokens for \(file.url.lastPathComponent): \(error)")
-                // Continue processing even if tokenization fails for one file
+        
+        // Process files in smaller batches with better memory management
+        let batchSize = 5 // Smaller batches to reduce memory pressure
+        let batches = files.chunked(into: batchSize)
+        
+        for batch in batches {
+            await withTaskGroup(of: XMLFormatterService.FileEntry?.self) { group in
+                for file in batch {
+                    group.addTask {
+                        await self.processFileAsync(file)
+                    }
+                }
+                
+                // Collect results from the batch
+                for await entry in group {
+                    if let entry = entry {
+                        entries.append(entry)
+                    }
+                }
             }
-            let entry = XMLFormatterService.FileEntry(
-                displayName: file.url.lastPathComponent,
-                absolutePath: file.url.path,
-                languageHint: LanguageMap.languageHint(for: file.url),
-                contents: content
-            )
-            entries.append(entry)
+            
+            // Yield control to prevent blocking and allow memory cleanup
+            await Task.yield()
         }
 
         let rendered = xml.render(codebaseRoot: root, files: entries, includeTree: includeTree)
-        let output = Output(xml: rendered, totalTokens: totalTokens)
         
-        // Check if content has changed
-        let currentFiles = Set(files.map { $0.url })
-        let contentChanged = lastOutput != output || lastGenerationFiles != currentFiles
+        // Use standardized language-aware tokenization
+        let xmlTokens = tokenizer.estimateTokens(rendered, languageHint: "xml")
+        
+        let output = Output(xml: rendered, totalTokens: xmlTokens)
+        
+        // Don't notify of content changes to avoid infinite loops
+        // The view will handle regeneration based on specific triggers
         
         // Update cache
         lastOutput = output
-        lastGenerationFiles = currentFiles
-        
-        // Notify if content changed
-        if contentChanged {
-            onContentChange?()
-        }
+        lastGenerationFiles = Set(files.map { $0.url })
         
         return output
     }
@@ -164,7 +240,11 @@ final class WorkspaceEngine {
         }
         
         let rendered = xml.render(codebaseRoot: root, files: entries, includeTree: includeTree)
-        let output = Output(xml: rendered, totalTokens: totalTokens)
+        
+        // Use standardized language-aware tokenization
+        let xmlTokens = tokenizer.estimateTokens(rendered, languageHint: "xml")
+        
+        let output = Output(xml: rendered, totalTokens: xmlTokens)
         
         // Check if content has changed
         let currentFiles = Set(selectedFiles.map { $0.url })
@@ -180,6 +260,53 @@ final class WorkspaceEngine {
         }
         
         return output
+    }
+    
+    // MARK: - Private Helper Methods
+    
+    /// Process a single file asynchronously with proper memory management
+    private func processFileAsync(_ file: FileInfo) async -> XMLFormatterService.FileEntry? {
+        // Skip very large files to avoid memory issues
+        let attrs = try? FileManager.default.attributesOfItem(atPath: file.url.path)
+        let fileSize = (attrs?[.size] as? Int) ?? 0
+        
+        guard fileSize < AppConfiguration.maxFileSizeBytes else { // Skip files exceeding size limit
+            print("Skipping large file: \(file.url.lastPathComponent) (\(fileSize) bytes)")
+            return nil
+        }
+        
+        return autoreleasepool {
+            guard let data = try? Data(contentsOf: file.url),
+                  let content = String(data: data, encoding: .utf8) else { 
+                return nil 
+            }
+            
+            return XMLFormatterService.FileEntry(
+                displayName: file.url.lastPathComponent,
+                absolutePath: file.url.path,
+                languageHint: LanguageMap.languageHint(for: file.url),
+                contents: content
+            )
+        }
+    }
+    
+    /// Process a FileNode asynchronously with proper memory management
+    private func processFileNodeAsync(_ fileNode: FileNode) async -> (XMLFormatterService.FileEntry?, Int) {
+        return autoreleasepool {
+            guard let data = try? Data(contentsOf: fileNode.url),
+                  let content = String(data: data, encoding: .utf8) else { 
+                return (nil, 0)
+            }
+            
+            let entry = XMLFormatterService.FileEntry(
+                displayName: fileNode.url.lastPathComponent,
+                absolutePath: fileNode.url.path,
+                languageHint: LanguageMap.languageHint(for: fileNode.url),
+                contents: content
+            )
+            
+            return (entry, fileNode.tokenCount)
+        }
     }
 }
 

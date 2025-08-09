@@ -1,5 +1,14 @@
 import Foundation
 
+// Helper extension for chunking arrays
+extension Array {
+    func chunked(into size: Int) -> [[Element]] {
+        return stride(from: 0, to: count, by: size).map {
+            Array(self[$0..<Swift.min($0 + size, count)])
+        }
+    }
+}
+
 // Tree structure for file hierarchy
 @MainActor
 @Observable
@@ -58,6 +67,14 @@ final class FileNode: Identifiable, Hashable {
     func toggleSelection() {
         isSelected.toggle()
         if isDirectory {
+            // Count total files to be selected
+            let fileCount = countFiles()
+            
+            // Warn if selecting too many files
+            if isSelected && fileCount > AppConfiguration.fileSelectionWarningThreshold {
+                print("Warning: Selecting \(fileCount) files. This may impact performance.")
+            }
+            
             for child in children {
                 child.isSelected = isSelected
                 if child.isDirectory {
@@ -65,6 +82,14 @@ final class FileNode: Identifiable, Hashable {
                 }
             }
         }
+    }
+    
+    // Count total files in this node and children
+    func countFiles() -> Int {
+        if !isDirectory {
+            return 1
+        }
+        return children.reduce(0) { $0 + $1.countFiles() }
     }
     
     private func toggleChildrenSelection() {
@@ -147,20 +172,44 @@ final class FileTreeModel {
     }
     
     private func calculateTokenCounts() async {
-        for node in allNodes where !node.isDirectory {
-            if let data = try? Data(contentsOf: node.url),
-               let content = String(data: data, encoding: .utf8) {
-                do {
-                    node.tokenCount = try await tokenizer.countTokens(content)
-                } catch {
-                    print("Warning: Failed to count tokens for \(node.name): \(error)")
-                    node.tokenCount = 0
+        // Process files in batches to avoid memory spikes
+        let batchSize = AppConfiguration.processingBatchSize
+        let fileNodes = allNodes.filter { !$0.isDirectory }
+        
+        for batch in fileNodes.chunked(into: batchSize) {
+            await withTaskGroup(of: Void.self) { group in
+                for node in batch {
+                    group.addTask { [weak self] in
+                        await self?.calculateTokensForNode(node)
+                    }
                 }
             }
         }
         
         // Update aggregate counts
         rootNode?.updateAggregateTokens()
+    }
+    
+    private func calculateTokensForNode(_ node: FileNode) async {
+        // Skip large files to avoid memory issues
+        guard let attrs = try? FileManager.default.attributesOfItem(atPath: node.url.path),
+              let fileSize = attrs[.size] as? Int,
+              fileSize < AppConfiguration.maxFileSizeBytes else { // Skip files exceeding size limit
+            node.tokenCount = 0
+            return
+        }
+        
+        // Use autoreleasepool to manage temporary objects from file I/O
+        node.tokenCount = autoreleasepool {
+            guard let data = try? Data(contentsOf: node.url),
+                  let content = String(data: data, encoding: .utf8) else {
+                return 0
+            }
+            
+            // Use language-aware tokenization with proper language hint
+            let languageHint = LanguageMap.languageHint(for: node.url)
+            return tokenizer.estimateTokens(content, languageHint: languageHint)
+        }
     }
     
     func updateSelection(_ node: FileNode) {
@@ -225,7 +274,7 @@ final class FileTreeModel {
     // MARK: - File System Watching
     
     private func startWatching(at url: URL) {
-        fileSystemWatcher = FileSystemWatcher(url: url, debounceInterval: 0.5)
+        fileSystemWatcher = FileSystemWatcher(url: url, debounceInterval: 1.0)
         fileSystemWatcher?.onChanges = { [weak self] changes in
             Task { @MainActor in
                 await self?.handleFileSystemChanges(changes)
@@ -248,6 +297,12 @@ final class FileTreeModel {
     private func handleFileSystemChanges(_ changes: [FileSystemWatcher.FileChange]) async {
         guard let rootURL = rootNode?.url,
               let ignoreRules = currentIgnoreRules else { return }
+        
+        // Throttle file system changes to avoid excessive updates
+        guard changes.count < AppConfiguration.maxFileSystemChanges else {
+            print("Too many file system changes (\(changes.count)), skipping update")
+            return
+        }
         
         print("Detected \(changes.count) file system change(s)")
         
@@ -309,21 +364,28 @@ final class FileTreeModel {
         for fileURL in modifiedFiles {
             // Find the corresponding node
             if let node = allNodes.first(where: { $0.url == fileURL && !$0.isDirectory }) {
-                // Recalculate token count for this file only
-                if let data = try? Data(contentsOf: fileURL),
-                   let content = String(data: data, encoding: .utf8) {
-                    do {
-                        let oldTokenCount = node.tokenCount
-                        node.tokenCount = try await tokenizer.countTokens(content)
-                        
-                        if oldTokenCount != node.tokenCount {
-                            print("Updated token count for \(node.name): \(oldTokenCount) -> \(node.tokenCount)")
-                            // Update aggregate counts up the tree
-                            node.parent?.updateAggregateTokens()
-                        }
-                    } catch {
-                        print("Warning: Failed to update tokens for \(node.name): \(error)")
+                // Recalculate token count for this file only with proper memory management
+                let (oldTokenCount, newTokenCount) = autoreleasepool {
+                    let oldCount = node.tokenCount
+                    
+                    guard let data = try? Data(contentsOf: fileURL),
+                          let content = String(data: data, encoding: .utf8) else {
+                        return (oldCount, oldCount)
                     }
+                    
+                    // Use language-aware tokenization with proper language hint
+                    let languageHint = LanguageMap.languageHint(for: fileURL)
+                    let newCount = tokenizer.estimateTokens(content, languageHint: languageHint)
+                    
+                    return (oldCount, newCount)
+                }
+                
+                node.tokenCount = newTokenCount
+                
+                if oldTokenCount != newTokenCount {
+                    print("Updated token count for \(node.name): \(oldTokenCount) -> \(newTokenCount)")
+                    // Update aggregate counts up the tree
+                    node.parent?.updateAggregateTokens()
                 }
             }
         }

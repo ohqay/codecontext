@@ -17,7 +17,7 @@ final class FileScanner {
         
         init(
             followSymlinks: Bool = false,
-            maxFileSizeBytes: UInt64 = 5 * 1024 * 1024,
+            maxFileSizeBytes: UInt64 = AppConfiguration.maxFileSizeBytes,
             ignoreRules: IgnoreRules,
             enableExclusionDetection: Bool = true,
             allowOverrides: Set<URL> = []
