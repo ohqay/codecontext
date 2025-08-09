@@ -7,6 +7,7 @@ final class WorkspaceEngine {
     private let scanner = FileScanner()
     private let xml = XMLFormatterService()
     private let progressiveGenerator = ProgressiveXMLGenerator()
+    private let streamingGenerator = StreamingXMLGenerator()
     private let notificationSystem: NotificationSystem
     
     // Callback for when workspace content changes
@@ -53,7 +54,7 @@ final class WorkspaceEngine {
         for workspace: SDWorkspace,
         modelContext: ModelContext,
         includeTree: Bool,
-        onProgress: @escaping (Int, Int) -> Void
+        onProgress: @escaping @Sendable (Int, Int) -> Void
     ) async -> Output? {
         guard let root = resolveURL(from: workspace) else { return nil }
 
@@ -94,22 +95,39 @@ final class WorkspaceEngine {
         )
         let scanResult = scanner.scanWithExclusions(root: root, options: options)
         
-        // Use progressive generator
-        let xml = await progressiveGenerator.generateProgressive(
-            codebaseRoot: root,
-            files: scanResult.includedFiles,
-            selectedPaths: selectedFilePaths,
-            includeTree: includeTree
-        ) { progress in
-            onProgress(progress.current, progress.total)
+        // Use streaming generator for better performance
+        do {
+            let xmlString = try await streamingGenerator.generateStreaming(
+                codebaseRoot: root,
+                files: scanResult.includedFiles,
+                selectedPaths: selectedFilePaths,
+                includeTree: includeTree
+            ) { progress in
+                onProgress(progress.current, progress.total)
+            }
+            
+            let tokenCount = tokenizer.estimateTokens(xmlString, languageHint: "xml")
+            return Output(xml: xmlString, totalTokens: tokenCount)
+        } catch {
+            // Fall back to progressive generator if streaming fails
+            print("Streaming generation failed: \(error). Falling back to progressive generator.")
+            
+            let xml = await progressiveGenerator.generateProgressive(
+                codebaseRoot: root,
+                files: scanResult.includedFiles,
+                selectedPaths: selectedFilePaths,
+                includeTree: includeTree
+            ) { progress in
+                onProgress(progress.current, progress.total)
+            }
+            
+            guard let xmlString = xml else {
+                return nil // Cancelled
+            }
+            
+            let tokenCount = tokenizer.estimateTokens(xmlString, languageHint: "xml")
+            return Output(xml: xmlString, totalTokens: tokenCount)
         }
-        
-        guard let xmlString = xml else {
-            return nil // Cancelled
-        }
-        
-        let tokenCount = tokenizer.estimateTokens(xmlString, languageHint: "xml")
-        return Output(xml: xmlString, totalTokens: tokenCount)
     }
     
     func generate(for workspace: SDWorkspace, modelContext: ModelContext, includeTree: Bool) async -> Output? {

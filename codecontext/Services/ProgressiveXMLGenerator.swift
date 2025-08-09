@@ -1,8 +1,7 @@
 import Foundation
 
 /// Generates XML progressively to avoid blocking the main thread
-@MainActor
-final class ProgressiveXMLGenerator {
+final class ProgressiveXMLGenerator: Sendable {
     
     struct Progress {
         let current: Int
@@ -13,20 +12,25 @@ final class ProgressiveXMLGenerator {
     }
     
     private let xml = XMLFormatterService()
-    private var isCancelled = false
-    private var currentTask: Task<Void, Never>?
-    private var processedEntries: [XMLFormatterService.FileEntry] = []
+    private let isCancelledLock = NSLock()
+    private var _isCancelled = false
     
-    /// Cancel the current generation and clean up resources
+    private var isCancelled: Bool {
+        get {
+            isCancelledLock.lock()
+            defer { isCancelledLock.unlock() }
+            return _isCancelled
+        }
+        set {
+            isCancelledLock.lock()
+            defer { isCancelledLock.unlock() }
+            _isCancelled = newValue
+        }
+    }
+    
+    /// Cancel the current generation
     func cancel() {
         isCancelled = true
-        currentTask?.cancel()
-        
-        // Clean up processed entries to free memory
-        processedEntries.removeAll()
-        
-        // Reset state
-        currentTask = nil
     }
     
     /// Generate XML progressively with progress updates
@@ -66,13 +70,15 @@ final class ProgressiveXMLGenerator {
                 return nil
             }
             
-            // Update progress
+            // Update progress on main actor
             let progress = Progress(
                 current: index + 1,
                 total: total,
                 percentage: Double(index + 1) / Double(total) * 100
             )
-            onProgress(progress)
+            await MainActor.run {
+                onProgress(progress)
+            }
             
             // Process file
             if let entry = await processFile(file) {
