@@ -59,6 +59,7 @@ struct FileTreeView: NSViewRepresentable {
         outlineView.autoresizesOutlineColumn = false
         outlineView.indentationPerLevel = 24
         outlineView.columnAutoresizingStyle = .uniformColumnAutoresizingStyle
+        outlineView.intercellSpacing = NSSize(width: 0, height: 2)
         
         // Create columns - reordered: name, tokens, checkbox
         let nameColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("name"))
@@ -70,22 +71,24 @@ struct FileTreeView: NSViewRepresentable {
         
         let tokenColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("tokens"))
         tokenColumn.title = "Tokens"
-        tokenColumn.width = 80
+        tokenColumn.width = 75
         tokenColumn.minWidth = 60
         tokenColumn.maxWidth = 120
         outlineView.addTableColumn(tokenColumn)
         
         let checkColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("checkbox"))
         checkColumn.title = ""
-        checkColumn.width = 30
-        checkColumn.minWidth = 30
-        checkColumn.maxWidth = 30
+        checkColumn.width = 24
+        checkColumn.minWidth = 24
+        checkColumn.maxWidth = 24
         outlineView.addTableColumn(checkColumn)
         
         scrollView.documentView = outlineView
         scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = true
         scrollView.autohidesScrollers = true
+        scrollView.contentInsets = NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
+        scrollView.automaticallyAdjustsContentInsets = false
         
         // Set up spacebar handler
         outlineView.onSpacebarPressed = context.coordinator.handleSpacebarPress
@@ -408,7 +411,7 @@ struct FileTreeView: NSViewRepresentable {
             
             container.addSubview(checkbox)
             NSLayoutConstraint.activate([
-                checkbox.centerXAnchor.constraint(equalTo: container.centerXAnchor),
+                checkbox.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -2),
                 checkbox.centerYAnchor.constraint(equalTo: container.centerYAnchor)
             ])
             
