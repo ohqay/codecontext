@@ -45,6 +45,7 @@ struct MainWindow: View {
                 EmptySelectionView()
             }
         }
+        .buttonStyle(.bordered)
         .focusedValue(\._workspaceActions, WorkspaceActions(
             newTab: createNewTab,
             openFolder: openFolder,
