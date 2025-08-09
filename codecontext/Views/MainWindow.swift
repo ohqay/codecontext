@@ -1,6 +1,6 @@
-import SwiftUI
-import SwiftData
 import AppKit
+import SwiftData
+import SwiftUI
 
 @Observable
 final class AppState {
@@ -23,11 +23,15 @@ struct MainWindow: View {
 
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
-            SidebarView(selection: $selection, filterFocused: $filterFocused, selectedTokenCount: Binding(
-                get: { appState.selectedTokenCount },
-                set: { appState.selectedTokenCount = $0 }
-            ))
+            SidebarView(
+                selection: $selection, filterFocused: $filterFocused,
+                selectedTokenCount: Binding(
+                    get: { appState.selectedTokenCount },
+                    set: { appState.selectedTokenCount = $0 }
+                )
+            )
             .navigationSplitViewColumnWidth(min: 280, ideal: 400, max: 600)
+            .toolbar(removing: .sidebarToggle)
         } detail: {
             if let selectedWorkspace = selection {
                 WorkspaceDetailView(
@@ -45,17 +49,31 @@ struct MainWindow: View {
                 EmptySelectionView()
             }
         }
-        .focusedValue(\._workspaceActions, WorkspaceActions(
-            newTab: createNewTab,
-            openFolder: openFolder,
-            copyOutput: copyOutput,
-            toggleFileTree: { appState.includeFileTreeInOutput.toggle() },
-            refresh: triggerRefresh,
-            focusFilter: { filterFocused = true },
-            toggleSidebar: toggleSidebar
-        ))
-        .toolbar { }
-        .onAppear { 
+        .focusedValue(
+            \._workspaceActions,
+            WorkspaceActions(
+                newTab: createNewTab,
+                openFolder: openFolder,
+                copyOutput: copyOutput,
+                toggleFileTree: { appState.includeFileTreeInOutput.toggle() },
+                refresh: triggerRefresh,
+                focusFilter: { filterFocused = true },
+                toggleSidebar: toggleSidebar
+            )
+        )
+        .toolbar {
+            ToolbarItem(placement: .navigation) {
+                Button(action: toggleSidebar) {
+                    Image(
+                        systemName: columnVisibility == .detailOnly
+                            ? "sidebar.left" : "sidebar.left"
+                    )
+                    .symbolVariant(columnVisibility == .detailOnly ? .none : .fill)
+                    .help(columnVisibility == .detailOnly ? "Show Sidebar" : "Hide Sidebar")
+                }
+            }
+        }
+        .onAppear {
             ensureDefaultPreference()
             configureWindowForTabs()
         }
@@ -74,14 +92,14 @@ struct MainWindow: View {
             modelContext.insert(SDPreference())
         }
     }
-    
+
     private func configureWindowForTabs() {
         // Configure the current window for native tabs
         DispatchQueue.main.async {
             if let window = NSApp.keyWindow {
                 window.tabbingMode = .preferred
                 window.titleVisibility = .visible
-                
+
                 // Set window title based on workspace
                 if let workspace = selection {
                     window.title = workspace.name
@@ -112,7 +130,7 @@ struct MainWindow: View {
     private func triggerRefresh() {
         NotificationCenter.default.post(name: .requestRefresh, object: nil)
     }
-    
+
     private func toggleSidebar() {
         withAnimation(.easeInOut(duration: 0.3)) {
             columnVisibility = columnVisibility == .detailOnly ? .all : .detailOnly
@@ -121,9 +139,68 @@ struct MainWindow: View {
 }
 
 private struct EmptySelectionView: View {
+    @Environment(\.modelContext) private var modelContext
+
     var body: some View {
         ContentPlaceholder {
-            Text("Open a folder to begin")
+            VStack(spacing: 16) {
+                Text("Open a folder to begin")
+                GlassButton(
+                    title: "Open Folder",
+                    hint: "⌘O",
+                    isProminent: true,
+                    action: {
+                        _ = FolderPicker.openFolder(modelContext: modelContext)
+                    }
+                )
+            }
+        }
+    }
+}
+
+struct GlassButton: View {
+    let title: String
+    let hint: String?
+    let isProminent: Bool
+    let action: () -> Void
+    
+    init(
+        title: String,
+        hint: String? = nil,
+        isProminent: Bool = false,
+        action: @escaping () -> Void
+    ) {
+        self.title = title
+        self.hint = hint
+        self.isProminent = isProminent
+        self.action = action
+    }
+    
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Text(title)
+                if let hint = hint {
+                    Text(hint)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+        }
+        .modifier(GlassButtonModifier(isProminent: isProminent))
+        .cornerRadius(.greatestFiniteMagnitude)
+        .focusEffectDisabled()
+    }
+}
+
+private struct GlassButtonModifier: ViewModifier {
+    let isProminent: Bool
+    
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if isProminent {
+            content.buttonStyle(.glassProminent)
+        } else {
+            content.buttonStyle(.glass)
         }
     }
 }
@@ -131,7 +208,6 @@ private struct EmptySelectionView: View {
 extension Notification.Name {
     static let requestCopyOutput = Notification.Name("requestCopyOutput")
     static let requestRefresh = Notification.Name("requestRefresh")
-    static let requestOpenFromWelcome = Notification.Name("requestOpenFromWelcome")
     static let fileSystemChanged = Notification.Name("fileSystemChanged")
     static let selectionChanged = Notification.Name("selectionChanged")
     static let outlineViewNeedsRefresh = Notification.Name("outlineViewNeedsRefresh")
