@@ -98,6 +98,28 @@ struct AppConfiguration {
     static func exceedsXMLGenerationSizeLimit(_ sizeBytes: UInt64) -> Bool {
         return sizeBytes > maxFileSizeBytesForXMLGeneration
     }
+    
+    /// Format token count for display with consistent notation
+    /// - Parameter count: Token count to format
+    /// - Returns: Formatted string (empty for 0, k/M notation for others)
+    static func formatTokenCount(_ count: Int) -> String {
+        if count == 0 { return "" }
+        // Always use "k" notation for consistency
+        let thousands = Double(count) / 1000.0
+        if thousands < 1.0 {
+            // For values less than 1000, show with 2 decimal places
+            return String(format: "%.2fk", thousands)
+        } else if thousands < 10.0 {
+            // For 1k-10k, show with 1 decimal place
+            return String(format: "%.1fk", thousands)
+        } else if thousands < 1000.0 {
+            // For 10k-999k, show as integer
+            return String(format: "%.0fk", thousands)
+        } else {
+            // For 1M+, switch to M notation
+            return String(format: "%.1fM", Double(count) / 1_000_000)
+        }
+    }
 }
 
 // MARK: - Environment-based Configuration
