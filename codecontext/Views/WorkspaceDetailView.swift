@@ -24,77 +24,45 @@ struct WorkspaceDetailView: View {
                 isGenerating: isGenerating,
                 selectedFileCount: selectedFileCount,
                 selectedTokenCount: selectedTokenCount,
-                onGenerate: { scheduleRegeneration() }
+                onGenerate: scheduleRegeneration
             )
             Divider()
             
             if isGenerating {
-                // Show progress during generation
-                VStack(spacing: 12) {
-                    ProgressView(value: generationProgress, total: 100)
-                        .progressViewStyle(.linear)
-                    Text(progressMessage)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Button("Cancel") {
-                        regenerationTask?.cancel()
-                        isGenerating = false
-                    }
-                    .buttonStyle(.glass)
-                }
-                .padding()
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                GenerationProgressView(
+                    progress: generationProgress,
+                    message: progressMessage,
+                    onCancel: cancelGeneration
+                )
             } else {
                 OutputPreview(text: output)
             }
         }
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button(action: { NotificationCenter.default.post(name: .requestCopyOutput, object: nil) }) {
-                    Image(systemName: "doc.on.doc")
-                        .font(.system(size: 16, weight: .regular))
-                }
-                .buttonStyle(.glass)
-                .help("Copy XML Output")
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .requestCopyOutput)) { _ in
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(output, forType: .string)
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .requestRefresh)) { _ in
-            Task {
-                await regenerateOutput()
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .fileSystemChanged)) { _ in
-            Task {
-                await regenerateOutput()
-            }
-        }
-        .onChange(of: includeFileTree) { _, _ in
-            scheduleRegeneration()
-        }
-        .onChange(of: workspace.selectionJSON) { _, newValue in
-            // Only update count, don't auto-generate
-            if newValue != lastSelectionJSON {
-                lastSelectionJSON = newValue
-                updateSelectedFileCount()
-            }
-        }
-        .task { 
-            // Initialize engine with notification system
-            engine = WorkspaceEngine(notificationSystem: notificationSystem)
-            lastSelectionJSON = workspace.selectionJSON
-            
-            // Don't auto-generate on load
-            updateSelectedFileCount()
-        }
-        .onDisappear {
-            // Cancel any pending regeneration when view disappears
-            regenerationTask?.cancel()
-            regenerationTask = nil
-        }
+        .toolbar { OutputToolbar() }
+        .apply(OutputNotificationHandlers(
+            output: output,
+            onRefresh: { await regenerateOutput() }
+        ))
+        .apply(WorkspaceChangeHandlers(
+            workspace: workspace,
+            includeFileTree: includeFileTree,
+            lastSelectionJSON: $lastSelectionJSON,
+            onTreeToggle: scheduleRegeneration,
+            onSelectionChange: updateSelectedFileCount
+        ))
+        .apply(LifecycleHandlers(
+            workspace: workspace,
+            engine: $engine,
+            regenerationTask: $regenerationTask,
+            lastSelectionJSON: $lastSelectionJSON,
+            notificationSystem: notificationSystem,
+            onLoad: updateSelectedFileCount
+        ))
+    }
+    
+    private func cancelGeneration() {
+        regenerationTask?.cancel()
+        isGenerating = false
     }
 
     private func regenerateOutput() async {
@@ -199,6 +167,126 @@ private struct OutputPreview: View {
         .background(.thinMaterial)
     }
 }
+
+// MARK: - Progress View
+
+private struct GenerationProgressView: View {
+    let progress: Double
+    let message: String
+    let onCancel: () -> Void
+    
+    var body: some View {
+        VStack(spacing: 12) {
+            ProgressView(value: progress, total: 100)
+                .progressViewStyle(.linear)
+            Text(message)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Button("Cancel", action: onCancel)
+                .buttonStyle(.glass)
+        }
+        .padding()
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+// MARK: - Toolbar
+
+private struct OutputToolbar: ToolbarContent {
+    var body: some ToolbarContent {
+        ToolbarItem(placement: .primaryAction) {
+            Button(action: copyOutput) {
+                Image(systemName: "doc.on.doc")
+                    .font(.system(size: 16, weight: .regular))
+            }
+            .buttonStyle(.glass)
+            .help("Copy XML Output")
+        }
+    }
+    
+    private func copyOutput() {
+        NotificationCenter.default.post(name: .requestCopyOutput, object: nil)
+    }
+}
+
+// MARK: - View Modifiers
+
+private struct OutputNotificationHandlers: ViewModifier {
+    let output: String
+    let onRefresh: () async -> Void
+    
+    func body(content: Content) -> some View {
+        content
+            .onReceive(NotificationCenter.default.publisher(for: .requestCopyOutput)) { _ in
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(output, forType: .string)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .requestRefresh)) { _ in
+                Task { await onRefresh() }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .fileSystemChanged)) { _ in
+                Task { await onRefresh() }
+            }
+    }
+}
+
+private struct WorkspaceChangeHandlers: ViewModifier {
+    let workspace: SDWorkspace
+    let includeFileTree: Bool
+    @Binding var lastSelectionJSON: String
+    let onTreeToggle: () -> Void
+    let onSelectionChange: () -> Void
+    
+    func body(content: Content) -> some View {
+        content
+            .onChange(of: includeFileTree) { _, _ in
+                onTreeToggle()
+            }
+            .onChange(of: workspace.selectionJSON) { _, newValue in
+                // Only update count, don't auto-generate
+                if newValue != lastSelectionJSON {
+                    lastSelectionJSON = newValue
+                    onSelectionChange()
+                }
+            }
+    }
+}
+
+private struct LifecycleHandlers: ViewModifier {
+    let workspace: SDWorkspace
+    @Binding var engine: WorkspaceEngine?
+    @Binding var regenerationTask: Task<Void, Never>?
+    @Binding var lastSelectionJSON: String
+    let notificationSystem: NotificationSystem
+    let onLoad: () -> Void
+    
+    func body(content: Content) -> some View {
+        content
+            .task {
+                // Initialize engine with notification system
+                engine = WorkspaceEngine(notificationSystem: notificationSystem)
+                lastSelectionJSON = workspace.selectionJSON
+                
+                // Don't auto-generate on load
+                onLoad()
+            }
+            .onDisappear {
+                // Cancel any pending regeneration when view disappears
+                regenerationTask?.cancel()
+                regenerationTask = nil
+            }
+    }
+}
+
+// MARK: - Helper Extension
+
+private extension View {
+    func apply<T: ViewModifier>(_ modifier: T) -> some View {
+        self.modifier(modifier)
+    }
+}
+
+// MARK: - Content Placeholder
 
 struct ContentPlaceholder<Content: View>: View {
     @ViewBuilder var content: () -> Content
