@@ -12,8 +12,15 @@ import SwiftData
 struct codecontextApp: App {
     @State private var notificationSystem = NotificationSystem()
     
+    init() {
+        // Enable native window tabbing for macOS
+        #if os(macOS)
+        NSWindow.allowsAutomaticWindowTabbing = true
+        #endif
+    }
+    
     var body: some Scene {
-        WindowGroup {
+        WindowGroup(id: "main") {
             ContentView()
                 .environment(notificationSystem)
                 .frame(minWidth: 900, minHeight: 600)

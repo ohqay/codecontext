@@ -57,11 +57,11 @@ struct ExclusionNotificationView: View {
                 .frame(maxHeight: 200)
             }
             
-            // Expand/collapse toggle
-            if notification.exclusions.count > 3 {
+            // Always show expand/collapse toggle if there are exclusions
+            if !notification.exclusions.isEmpty {
                 Button(action: { isExpanded.toggle() }) {
                     HStack {
-                        Text(isExpanded ? "Show less" : "Show details")
+                        Text(isExpanded ? "Show less" : "Show details (\(notification.exclusions.count))")
                         Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
                     }
                     .font(.caption)
