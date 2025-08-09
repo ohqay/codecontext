@@ -1,31 +1,39 @@
 import SwiftUI
 import SwiftData
+import AppKit
 
 @Observable
 final class AppState {
     var includeFileTreeInOutput: Bool = false
+    var currentWorkspace: SDWorkspace?
 }
 
 struct MainWindow: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \SDWorkspace.lastOpenedAt, order: .reverse) private var workspaces: [SDWorkspace]
+    @Environment(\.openWindow) private var openWindow
 
     @State private var appState = AppState()
-    @State private var tabManager = TabManager()
+    @State private var selection: SDWorkspace?
+    @State private var columnVisibility: NavigationSplitViewVisibility = .all
+    @State private var filterFocused: Bool = false
+    @State private var filterText: String = ""
+    @State private var showWorkspaceList = false
 
     var body: some View {
-        TabView(selection: $tabManager.selectedTabId) {
-            ForEach(tabManager.tabs) { tab in
-                WorkspaceTabView(
-                    tab: tab,
-                    tabManager: tabManager,
-                    appState: appState,
-                    modelContext: modelContext
+        NavigationSplitView(columnVisibility: $columnVisibility) {
+            SidebarView(selection: $selection, filterFocused: $filterFocused)
+        } detail: {
+            if let selectedWorkspace = selection {
+                WorkspaceDetailView(
+                    workspace: selectedWorkspace,
+                    includeFileTree: Binding(
+                        get: { appState.includeFileTreeInOutput },
+                        set: { appState.includeFileTreeInOutput = $0 }
+                    )
                 )
-                .tabItem {
-                    Text(tabManager.displayName(for: tab))
-                }
-                .tag(tab.id)
+            } else {
+                EmptySelectionView()
             }
         }
         .focusedValue(\._workspaceActions, WorkspaceActions(
@@ -34,11 +42,21 @@ struct MainWindow: View {
             copyOutput: copyOutput,
             toggleFileTree: { appState.includeFileTreeInOutput.toggle() },
             refresh: triggerRefresh,
-            focusFilter: focusCurrentTabFilter,
+            focusFilter: { filterFocused = true },
             toggleSidebar: toggleSidebar
         ))
         .toolbar { }
-        .onAppear { ensureDefaultPreference() }
+        .onAppear { 
+            ensureDefaultPreference()
+            configureWindowForTabs()
+        }
+        .onChange(of: selection) { _, newWorkspace in
+            appState.currentWorkspace = newWorkspace
+            if let workspace = newWorkspace {
+                workspace.lastOpenedAt = .now
+                try? modelContext.save()
+            }
+        }
     }
 
     private func ensureDefaultPreference() {
@@ -47,13 +65,35 @@ struct MainWindow: View {
             modelContext.insert(SDPreference())
         }
     }
+    
+    private func configureWindowForTabs() {
+        // Configure the current window for native tabs
+        DispatchQueue.main.async {
+            if let window = NSApp.keyWindow {
+                window.tabbingMode = .preferred
+                window.titleVisibility = .visible
+                
+                // Set window title based on workspace
+                if let workspace = selection {
+                    window.title = workspace.name
+                } else {
+                    window.title = "codecontext"
+                }
+            }
+        }
+    }
 
     private func createNewTab() {
-        tabManager.addNewTab()
+        // Use native macOS tab creation
+        if let window = NSApp.keyWindow {
+            NSApp.sendAction(#selector(NSWindow.newWindowForTab(_:)), to: nil, from: window)
+        }
     }
 
     private func openFolder() {
-        FolderPicker.openFolder(modelContext: modelContext)
+        if let workspace = FolderPicker.openFolder(modelContext: modelContext) {
+            selection = workspace
+        }
     }
 
     private func copyOutput() {
@@ -62,66 +102,6 @@ struct MainWindow: View {
 
     private func triggerRefresh() {
         NotificationCenter.default.post(name: .requestRefresh, object: nil)
-    }
-    
-    private func focusCurrentTabFilter() {
-        guard let currentTab = tabManager.selectedTab else { return }
-        tabManager.updateFilterFocused(for: currentTab.id, focused: true)
-    }
-    
-    private func toggleSidebar() {
-        // This will be handled by the focused tab's view
-        // Just a placeholder for the command menu action
-    }
-}
-
-/// Individual tab view that contains its own NavigationSplitView and workspace selection
-private struct WorkspaceTabView: View {
-    let tab: WorkspaceTab
-    let tabManager: TabManager
-    let appState: AppState
-    let modelContext: ModelContext
-    
-    @State private var columnVisibility: NavigationSplitViewVisibility = .all
-    
-    // Local binding for this tab's workspace selection
-    private var selection: Binding<SDWorkspace?> {
-        Binding(
-            get: { tab.workspace },
-            set: { tabManager.updateWorkspace(for: tab.id, workspace: $0) }
-        )
-    }
-    
-    // Local binding for this tab's filter focus state
-    private var filterFocused: Binding<Bool> {
-        Binding(
-            get: { tab.filterFocused },
-            set: { tabManager.updateFilterFocused(for: tab.id, focused: $0) }
-        )
-    }
-    
-    var body: some View {
-        NavigationSplitView(columnVisibility: $columnVisibility) {
-            SidebarView(selection: selection, filterFocused: filterFocused)
-        } detail: {
-            if let selectedWorkspace = tab.workspace {
-                WorkspaceDetailView(workspace: selectedWorkspace, includeFileTree: Binding(
-                    get: { appState.includeFileTreeInOutput },
-                    set: { appState.includeFileTreeInOutput = $0 }
-                ))
-            } else {
-                EmptySelectionView()
-            }
-        }
-        .focusedValue(\._workspaceActions, WorkspaceActions(
-            newTab: { tabManager.addNewTab() },
-            openFolder: { FolderPicker.openFolder(modelContext: modelContext) },
-            copyOutput: { NotificationCenter.default.post(name: .requestCopyOutput, object: nil) },
-            toggleFileTree: { appState.includeFileTreeInOutput.toggle() },
-            refresh: { NotificationCenter.default.post(name: .requestRefresh, object: nil) },
-            focusFilter: { tabManager.updateFilterFocused(for: tab.id, focused: true) },
-            toggleSidebar: toggleSidebar
-        ))
     }
     
     private func toggleSidebar() {
@@ -144,4 +124,6 @@ extension Notification.Name {
     static let requestRefresh = Notification.Name("requestRefresh")
     static let requestOpenFromWelcome = Notification.Name("requestOpenFromWelcome")
     static let fileSystemChanged = Notification.Name("fileSystemChanged")
+    static let selectionChanged = Notification.Name("selectionChanged")
+    static let outlineViewNeedsRefresh = Notification.Name("outlineViewNeedsRefresh")
 }

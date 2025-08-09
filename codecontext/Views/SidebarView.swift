@@ -13,12 +13,10 @@ struct SidebarView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Show file tree for selected workspace, or workspace list
-            if let workspace = selection, !showWorkspaceList {
+            // Show file tree for selected workspace
+            if let workspace = selection {
                 // File tree view with filter and options
                 VStack(spacing: 0) {
-                    WorkspaceHeader(workspace: workspace, showList: $showWorkspaceList)
-                    Divider()
                     FilterBar(text: $filterText, focused: $filterFocused)
                     Divider()
                     FileTreeContainer(workspace: Binding(
@@ -27,72 +25,35 @@ struct SidebarView: View {
                     ), filterText: $filterText)
                 }
             } else {
-                // Workspace list
-                VStack(spacing: 0) {
-                    FilterBar(text: $filterText, focused: $filterFocused)
-                    List(selection: $selection) {
-                        Section("Workspaces") {
-                            ForEach(workspaces) { ws in
-                                HStack {
-                                    Image(systemName: "folder")
-                                    VStack(alignment: .leading) {
-                                        Text(ws.name)
-                                            .lineLimit(1)
-                                        Text(ws.originalPath)
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                            .lineLimit(1)
-                                    }
-                                }
-                                .tag(ws as SDWorkspace?)
-                            }
-                            .onDelete { indexSet in
-                                indexSet.forEach { modelContext.delete(workspaces[$0]) }
-                            }
+                // Empty state - prompt to open folder
+                VStack {
+                    Spacer()
+                    Image(systemName: "folder.badge.plus")
+                        .font(.system(size: 48))
+                        .foregroundStyle(.secondary)
+                    Text("No Folder Open")
+                        .font(.headline)
+                        .padding(.top, 8)
+                    Text("Open a folder to get started")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Button("Open Folder") {
+                        if let workspace = FolderPicker.openFolder(modelContext: modelContext) {
+                            selection = workspace
                         }
                     }
-                    .onChange(of: selection) { _, _ in
-                        showWorkspaceList = false
-                    }
+                    .buttonStyle(.bordered)
+                    .padding(.top, 12)
+                    Spacer()
                 }
             }
         }
-        .toolbar { SidebarToolbar() }
+        .toolbar { SidebarToolbar(selection: $selection) }
         .onReceive(NotificationCenter.default.publisher(for: .requestOpenFromWelcome)) { _ in
-            FolderPicker.openFolder(modelContext: modelContext)
-        }
-    }
-}
-
-private struct WorkspaceHeader: View {
-    let workspace: SDWorkspace
-    @Binding var showList: Bool
-    
-    var body: some View {
-        HStack {
-            Button(action: { showList = true }) {
-                Image(systemName: "chevron.left")
+            if let workspace = FolderPicker.openFolder(modelContext: modelContext) {
+                selection = workspace
             }
-            .buttonStyle(.plain)
-            
-            Image(systemName: "folder")
-            Text(workspace.name)
-                .font(.headline)
-                .lineLimit(1)
-            
-            Spacer()
-            
-            Menu {
-                FiltersMenu()
-            } label: {
-                Image(systemName: "line.3.horizontal.decrease.circle")
-            }
-            .menuStyle(.borderlessButton)
-            .fixedSize()
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(.bar)
     }
 }
 
@@ -104,7 +65,8 @@ private struct FilterBar: View {
     var body: some View {
         HStack {
             Image(systemName: "magnifyingglass")
-            TextField("Filter files", text: $text)
+                .foregroundStyle(.secondary)
+            TextField("Search files", text: $text)
                 .textFieldStyle(.plain)
                 .focused($isFocused)
         }
@@ -118,12 +80,27 @@ private struct FilterBar: View {
 
 private struct SidebarToolbar: ToolbarContent {
     @Environment(\.modelContext) private var modelContext
+    @Binding var selection: SDWorkspace?
     var body: some ToolbarContent {
         ToolbarItem(placement: .automatic) {
-            Menu("Filters") { FiltersMenu() }
+            Menu {
+                FiltersMenu()
+            } label: {
+                Image(systemName: "line.3.horizontal.decrease.circle")
+            }
+            .buttonStyle(.borderless)
+            .help("Filters")
         }
         ToolbarItem(placement: .automatic) {
-            Button("Open…") { FolderPicker.openFolder(modelContext: modelContext) }
+            Button(action: { 
+                if let workspace = FolderPicker.openFolder(modelContext: modelContext) {
+                    selection = workspace
+                }
+            }) {
+                Image(systemName: "folder.badge.plus")
+            }
+            .buttonStyle(.borderless)
+            .help("Open Folder")
         }
     }
 }
