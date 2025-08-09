@@ -9,12 +9,42 @@ struct WorkspaceDetailView: View {
     @State private var output: String = ""
     @State private var totalTokens: Int = 0
     @State private var engine: WorkspaceEngine?
+    @State private var regenerationTask: Task<Void, Never>?
+    @State private var lastSelectionJSON: String = ""
+    @State private var isGenerating = false
+    @State private var generationProgress: Double = 0.0
+    @State private var progressMessage = ""
+    @State private var selectedFileCount = 0
 
     var body: some View {
         VStack(spacing: 0) {
-            OutputHeader(includeFileTree: $includeFileTree)
+            OutputHeader(
+                includeFileTree: $includeFileTree,
+                isGenerating: isGenerating,
+                selectedFileCount: selectedFileCount,
+                onGenerate: { scheduleRegeneration() }
+            )
             Divider()
-            OutputPreview(text: output)
+            
+            if isGenerating {
+                // Show progress during generation
+                VStack(spacing: 12) {
+                    ProgressView(value: generationProgress, total: 100)
+                        .progressViewStyle(.linear)
+                    Text(progressMessage)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Button("Cancel") {
+                        regenerationTask?.cancel()
+                        isGenerating = false
+                    }
+                    .buttonStyle(.bordered)
+                }
+                .padding()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                OutputPreview(text: output)
+            }
         }
         .toolbar {
             ToolbarItemGroup(placement: .automatic) {
@@ -42,42 +72,103 @@ struct WorkspaceDetailView: View {
             }
         }
         .onChange(of: includeFileTree) { _, _ in
-            Task {
-                await regenerateOutput()
+            scheduleRegeneration()
+        }
+        .onChange(of: workspace.selectionJSON) { _, newValue in
+            // Only update count, don't auto-generate
+            if newValue != lastSelectionJSON {
+                lastSelectionJSON = newValue
+                updateSelectedFileCount()
             }
         }
         .task { 
             // Initialize engine with notification system
             engine = WorkspaceEngine(notificationSystem: notificationSystem)
+            lastSelectionJSON = workspace.selectionJSON
             
-            // Set up engine callback to auto-regenerate on content changes
-            engine?.onContentChange = {
-                Task { @MainActor in
-                    // Optional: Add visual feedback for auto-refresh
-                    print("WorkspaceDetailView: Content changed, output updated")
-                }
-            }
-            await regenerateOutput() 
+            // Don't auto-generate on load
+            updateSelectedFileCount()
+        }
+        .onDisappear {
+            // Cancel any pending regeneration when view disappears
+            regenerationTask?.cancel()
+            regenerationTask = nil
         }
     }
 
     private func regenerateOutput() async {
-        if let result = await engine?.generate(for: workspace, modelContext: modelContext, includeTree: includeFileTree) {
+        isGenerating = true
+        progressMessage = "Generating XML..."
+        generationProgress = 0
+        
+        if let result = await engine?.generateWithProgress(
+            for: workspace,
+            modelContext: modelContext,
+            includeTree: includeFileTree,
+            onProgress: { current, total in
+                Task { @MainActor in
+                    generationProgress = Double(current) / Double(total) * 100
+                    progressMessage = "Processing file \(current) of \(total)..."
+                }
+            }
+        ) {
             output = result.xml
             totalTokens = result.totalTokens
+        }
+        
+        isGenerating = false
+    }
+    
+    private func updateSelectedFileCount() {
+        if let data = workspace.selectionJSON.data(using: .utf8),
+           let paths = try? JSONDecoder().decode(Set<String>.self, from: data) {
+            selectedFileCount = paths.count
+        } else {
+            selectedFileCount = 0
+        }
+    }
+    
+    private func scheduleRegeneration() {
+        // Cancel any existing regeneration task
+        regenerationTask?.cancel()
+        
+        // Schedule new regeneration with debouncing
+        regenerationTask = Task {
+            // Debounce for 500ms
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            
+            // Check if task was cancelled
+            if !Task.isCancelled {
+                await regenerateOutput()
+            }
         }
     }
 }
 
 private struct OutputHeader: View {
     @Binding var includeFileTree: Bool
+    let isGenerating: Bool
+    let selectedFileCount: Int
+    let onGenerate: () -> Void
+    
     var body: some View {
         HStack {
             Toggle("Include file tree", isOn: $includeFileTree)
+            
             Spacer()
-            Button("Copy XML") {
-                NotificationCenter.default.post(name: .requestCopyOutput, object: nil)
+            
+            if selectedFileCount > 0 {
+                Text("\(selectedFileCount) files selected")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
+            
+            Button(action: onGenerate) {
+                Label("Generate", systemImage: "doc.text")
+            }
+            .buttonStyle(.bordered)
+            .disabled(isGenerating || selectedFileCount == 0)
+            .help(selectedFileCount == 0 ? "Select files to generate XML" : "Generate XML for selected files")
         }
         .padding(8)
     }
