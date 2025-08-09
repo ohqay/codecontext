@@ -57,18 +57,6 @@ struct WorkspaceDetailView: View {
                 .buttonStyle(.bordered)
                 .help("Copy XML Output")
             }
-            
-            ToolbarItem(placement: .navigation) {
-                Button(action: { 
-                    // Find the focused workspace actions to toggle sidebar
-                    NotificationCenter.default.post(name: .toggleSidebar, object: nil)
-                }) {
-                    Image(systemName: "sidebar.leading")
-                        .font(.system(size: 16, weight: .regular))
-                }
-                .buttonStyle(.bordered)
-                .help("Toggle Sidebar")
-            }
         }
         .onReceive(NotificationCenter.default.publisher(for: .requestCopyOutput)) { _ in
             NSPasteboard.general.clearContents()
