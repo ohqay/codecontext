@@ -35,26 +35,11 @@ struct SidebarView: View {
                     Text("No Folder Open")
                         .font(.headline)
                         .padding(.top, 8)
-                    Text("Open a folder to get started")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Button("Open Folder") {
-                        if let workspace = FolderPicker.openFolder(modelContext: modelContext) {
-                            selection = workspace
-                        }
-                    }
-                    .buttonStyle(.bordered)
-                    .padding(.top, 12)
                     Spacer()
                 }
             }
         }
         .toolbar { SidebarToolbar(selection: $selection) }
-        .onReceive(NotificationCenter.default.publisher(for: .requestOpenFromWelcome)) { _ in
-            if let workspace = FolderPicker.openFolder(modelContext: modelContext) {
-                selection = workspace
-            }
-        }
     }
 }
 
@@ -107,6 +92,7 @@ private struct SidebarToolbar: ToolbarContent {
         }
     }
 }
+
 
 private struct FiltersMenu: View {
     @Environment(\.modelContext) private var modelContext
