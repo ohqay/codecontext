@@ -9,30 +9,44 @@ struct XMLFormatterService: Sendable {
     }
 
     func render(codebaseRoot: URL, files: [FileEntry], includeTree: Bool, allFilePaths: [String]? = nil) -> String {
-        var lines: [String] = []
-        lines.append("<codebase>")
+        // Pre-calculate capacity for better performance
+        let estimatedCapacity = files.count * 500 + (includeTree ? 1000 : 0)
+        var output = ""
+        output.reserveCapacity(estimatedCapacity)
+        
+        output.append("<codebase>\n")
+        
         if includeTree {
-            lines.append("  <fileTree>")
+            output.append("  <fileTree>\n")
             // If allFilePaths is provided, use it for the full tree; otherwise fall back to selected files
             let treePaths = allFilePaths ?? files.map { $0.absolutePath }
-            lines.append(contentsOf: renderTreeFromPaths(root: codebaseRoot, paths: treePaths).map { "    " + $0 })
-            lines.append("  </fileTree>")
+            for line in renderTreeFromPaths(root: codebaseRoot, paths: treePaths) {
+                output.append("    ")
+                output.append(line)
+                output.append("\n")
+            }
+            output.append("  </fileTree>\n")
         }
 
         for f in files {
-            lines.append("  <file=\(f.displayName)>")
-            lines.append("  Path: \(f.absolutePath)")
-            lines.append("  `````\(f.languageHint)")
-            // Preserve contents as-is; do not escape within code fence
-            let fenced = f.contents.replacingOccurrences(of: "\r\n", with: "\n")
-            for line in fenced.split(separator: "\n", omittingEmptySubsequences: false) {
-                lines.append("  \(line)")
+            output.append("  <file=\(f.displayName)>\n")
+            output.append("  Path: \(f.absolutePath)\n")
+            output.append("  `````\(f.languageHint)\n")
+            
+            // Process content more efficiently
+            let contentLines = f.contents.split(separator: "\n", omittingEmptySubsequences: false)
+            for line in contentLines {
+                output.append("  ")
+                output.append(String(line))
+                output.append("\n")
             }
-            lines.append("  `````")
-            lines.append("  </file=\(f.displayName)>")
+            
+            output.append("  `````\n")
+            output.append("  </file=\(f.displayName)>\n")
         }
-        lines.append("</codebase>")
-        return lines.joined(separator: "\n") + "\n"
+        
+        output.append("</codebase>\n")
+        return output
     }
 
     private func renderTree(root: URL, files: [FileEntry]) -> [String] {

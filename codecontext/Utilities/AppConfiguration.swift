@@ -21,12 +21,11 @@ struct AppConfiguration {
     static let maxFileSizeBytes: UInt64 = 5 * 1024 * 1024
     
     /// Maximum file size in bytes for progressive XML generation
-    /// Default: 1MB (1 * 1024 * 1024 bytes)
+    /// Default: 10MB (10 * 1024 * 1024 bytes)
     ///
-    /// This smaller limit is used specifically by ProgressiveXMLGenerator
-    /// to avoid memory issues during streaming XML generation while maintaining
-    /// responsiveness of the UI.
-    static let maxFileSizeBytesForXMLGeneration: UInt64 = 1 * 1024 * 1024
+    /// This limit is used specifically by XML generators to handle larger files
+    /// while maintaining UI responsiveness through streaming and chunked processing.
+    static let maxFileSizeBytesForXMLGeneration: UInt64 = 10 * 1024 * 1024
     
     /// Sample size in bytes for content analysis
     /// Default: 1KB (1024 bytes)
@@ -38,16 +37,16 @@ struct AppConfiguration {
     // MARK: - Processing Limits
     
     /// Maximum number of files that can be processed in a single operation
-    /// Default: 1000 files
+    /// Default: 10000 files
     ///
-    /// Used by WorkspaceEngine to prevent hanging on operations with too many files
-    static let maxProcessableFiles: Int = 1000
+    /// Used by WorkspaceEngine to handle large codebases efficiently
+    static let maxProcessableFiles: Int = 10000
     
     /// Maximum number of files for progressive XML generation
-    /// Default: 500 files
+    /// Default: 10000 files
     ///
-    /// Used by ProgressiveXMLGenerator to limit batch operations
-    static let maxProgressiveXMLFiles: Int = 500
+    /// Used by XML generators with improved streaming capabilities
+    static let maxProgressiveXMLFiles: Int = 10000
     
     /// Batch size for processing operations
     /// Default: 10 files
