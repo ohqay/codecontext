@@ -49,7 +49,7 @@ struct WorkspaceDetailView: View {
             }
         }
         .toolbar {
-            ToolbarItemGroup(placement: .primaryAction) {
+            ToolbarItem(placement: .primaryAction) {
                 Button(action: { NotificationCenter.default.post(name: .requestCopyOutput, object: nil) }) {
                     Image(systemName: "doc.on.doc")
                         .font(.system(size: 16, weight: .regular))
