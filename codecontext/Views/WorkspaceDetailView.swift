@@ -176,7 +176,8 @@ private struct OutputHeader: View {
             .disabled(isGenerating || selectedFileCount == 0)
             .help(selectedFileCount == 0 ? "Select files to generate XML" : "Generate XML for selected files")
         }
-        .padding(8)
+        .padding(.horizontal, 20)
+        .padding(.vertical, 8)
     }
 }
 
