@@ -54,7 +54,7 @@ struct MainWindow: View {
             focusFilter: { filterFocused = true },
             toggleSidebar: toggleSidebar
         ))
-        .toolbar(removing: .sidebarToggle)
+        .toolbar { }
         .onAppear { 
             ensureDefaultPreference()
             configureWindowForTabs()
