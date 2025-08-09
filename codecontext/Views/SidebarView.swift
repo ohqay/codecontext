@@ -88,6 +88,7 @@ private struct SidebarToolbar: ToolbarContent {
                 FiltersMenu()
             } label: {
                 Image(systemName: "line.3.horizontal.decrease.circle")
+                    .font(.system(size: 16, weight: .regular))
             }
             .buttonStyle(.bordered)
             .help("Filters")
@@ -99,6 +100,7 @@ private struct SidebarToolbar: ToolbarContent {
                 }
             }) {
                 Image(systemName: "folder.badge.plus")
+                    .font(.system(size: 16, weight: .regular))
             }
             .buttonStyle(.bordered)
             .help("Open Folder")

@@ -52,6 +52,7 @@ struct WorkspaceDetailView: View {
             ToolbarItemGroup(placement: .primaryAction) {
                 Button(action: { NotificationCenter.default.post(name: .requestCopyOutput, object: nil) }) {
                     Image(systemName: "doc.on.doc")
+                        .font(.system(size: 16, weight: .regular))
                 }
                 .buttonStyle(.bordered)
                 .help("Copy XML Output")
