@@ -102,55 +102,57 @@ private struct SidebarToolbar: ToolbarContent {
 private struct FiltersMenu: View {
     @Environment(\.modelContext) private var modelContext
     @Query private var prefs: [SDPreference]
+    
+    // Define filter configurations
+    private let filterConfigs: [(title: String, keyPath: WritableKeyPath<SDPreference, Bool>, section: Int)] = [
+        // Section 0: Respect rules
+        ("Respect .gitignore", \.defaultRespectGitIgnore, 0),
+        ("Respect .ignore", \.defaultRespectDotIgnore, 0),
+        // Section 1: Exclude rules
+        ("Exclude node_modules", \.defaultExcludeNodeModules, 1),
+        ("Exclude .git", \.defaultExcludeGit, 1),
+        ("Exclude build", \.defaultExcludeBuild, 1),
+        ("Exclude dist", \.defaultExcludeDist, 1),
+        ("Exclude .next", \.defaultExcludeNext, 1),
+        ("Exclude .venv", \.defaultExcludeVenv, 1),
+        ("Exclude .DS_Store", \.defaultExcludeDSStore, 1),
+        ("Exclude DerivedData", \.defaultExcludeDerivedData, 1),
+    ]
+    
     var body: some View {
-        let pref = prefs.first
-        Toggle("Respect .gitignore", isOn: Binding(
-            get: { pref?.defaultRespectGitIgnore ?? true },
-            set: { _ in update { $0.defaultRespectGitIgnore.toggle() } }
-        ))
-        Toggle("Respect .ignore", isOn: Binding(
-            get: { pref?.defaultRespectDotIgnore ?? true },
-            set: { _ in update { $0.defaultRespectDotIgnore.toggle() } }
-        ))
-        Divider()
-        Toggle("Exclude node_modules", isOn: Binding(
-            get: { pref?.defaultExcludeNodeModules ?? true },
-            set: { _ in update { $0.defaultExcludeNodeModules.toggle() } }
-        ))
-        Toggle("Exclude .git", isOn: Binding(
-            get: { pref?.defaultExcludeGit ?? true },
-            set: { _ in update { $0.defaultExcludeGit.toggle() } }
-        ))
-        Toggle("Exclude build", isOn: Binding(
-            get: { pref?.defaultExcludeBuild ?? true },
-            set: { _ in update { $0.defaultExcludeBuild.toggle() } }
-        ))
-        Toggle("Exclude dist", isOn: Binding(
-            get: { pref?.defaultExcludeDist ?? true },
-            set: { _ in update { $0.defaultExcludeDist.toggle() } }
-        ))
-        Toggle("Exclude .next", isOn: Binding(
-            get: { pref?.defaultExcludeNext ?? true },
-            set: { _ in update { $0.defaultExcludeNext.toggle() } }
-        ))
-        Toggle("Exclude .venv", isOn: Binding(
-            get: { pref?.defaultExcludeVenv ?? true },
-            set: { _ in update { $0.defaultExcludeVenv.toggle() } }
-        ))
-        Toggle("Exclude .DS_Store", isOn: Binding(
-            get: { pref?.defaultExcludeDSStore ?? true },
-            set: { _ in update { $0.defaultExcludeDSStore.toggle() } }
-        ))
-        Toggle("Exclude DerivedData", isOn: Binding(
-            get: { pref?.defaultExcludeDerivedData ?? true },
-            set: { _ in update { $0.defaultExcludeDerivedData.toggle() } }
-        ))
+        ForEach(0..<2) { section in
+            if section == 1 {
+                Divider()
+            }
+            ForEach(filterConfigs.filter { $0.section == section }, id: \.title) { config in
+                FilterToggle(
+                    title: config.title,
+                    preference: prefs.first,
+                    keyPath: config.keyPath,
+                    onUpdate: update
+                )
+            }
+        }
     }
 
     private func update(_ mutate: (inout SDPreference) -> Void) {
         guard var pref = try? modelContext.fetch(FetchDescriptor<SDPreference>()).first else { return }
         mutate(&pref)
         try? modelContext.save()
+    }
+}
+
+private struct FilterToggle: View {
+    let title: String
+    let preference: SDPreference?
+    let keyPath: WritableKeyPath<SDPreference, Bool>
+    let onUpdate: ((inout SDPreference) -> Void) -> Void
+    
+    var body: some View {
+        Toggle(title, isOn: Binding(
+            get: { preference?[keyPath: keyPath] ?? true },
+            set: { _ in onUpdate { $0[keyPath: keyPath].toggle() } }
+        ))
     }
 }
 
