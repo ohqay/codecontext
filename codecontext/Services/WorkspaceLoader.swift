@@ -46,11 +46,11 @@ final class WorkspaceLoader {
         fileTreeModel: FileTreeModel,
         isRefresh: Bool
     ) async -> Int {
-        guard let url = resolveURL(from: workspace) else { 
+        guard let url = resolveURL(from: workspace) else {
             print("WorkspaceLoader: Failed to resolve URL for workspace: \(workspace.name)")
-            return 0 
+            return 0
         }
-        
+
         print("WorkspaceLoader: Loading workspace at \(url.path), isRefresh: \(isRefresh)")
         let ignoreRules = buildIgnoreRules(from: workspace, rootPath: url.path)
 
@@ -60,7 +60,7 @@ final class WorkspaceLoader {
             workspace.selectionJSON = "{}"
             await fileTreeModel.loadDirectory(at: url, ignoreRules: ignoreRules)
         }
-        
+
         print("WorkspaceLoader: Loaded \(fileTreeModel.allNodes.count) nodes")
         return isRefresh ? fileTreeModel.totalSelectedTokens : 0
     }
@@ -70,14 +70,21 @@ final class WorkspaceLoader {
         workspace: SDWorkspace,
         fileTreeModel: FileTreeModel
     ) {
-        let selectedFiles = fileTreeModel.rootNode?.getSelectedFiles() ?? []
-        let selectedPaths = Set(selectedFiles.map { $0.url.path })
+        // This is now handled by SelectionManager, just trigger the update
+        // The actual selection state will be updated asynchronously
+        Task {
+            let selectionManager = fileTreeModel.selectionManager
+            // Get only the selected FILES (not directories) for the workspace JSON
+            let (_, files, _) = await selectionManager.getSelectionState()
 
-        if let data = try? JSONEncoder().encode(selectedPaths),
-           let json = String(data: data, encoding: .utf8),
-           workspace.selectionJSON != json
-        {
-            workspace.selectionJSON = json
+            await MainActor.run {
+                if let data = try? JSONEncoder().encode(files),
+                   let json = String(data: data, encoding: .utf8),
+                   workspace.selectionJSON != json
+                {
+                    workspace.selectionJSON = json
+                }
+            }
         }
     }
 }
