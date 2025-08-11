@@ -168,6 +168,33 @@ xcodebuild test -scheme "codecontext"   # Tests pass
 - Handle errors appropriately
 - Report failures transparently
 
+## Tokenization Integrity (CRITICAL)
+
+**NEVER:**
+- Use character ratios or estimation for token counting
+- Allow tokenization to fail silently
+- Ship code that hasn't passed tokenization tests
+- Use outdated tokenizers (GPT-2, r50k_base)
+- Implement fallback estimation or "approximate" counting
+- **Roll your own tokenizer implementation**
+- **Create workaround or hacky tokenization approaches**
+- **Use temporary solutions or "for now" tokenization code**
+- **Implement custom BPE or token parsing logic**
+
+**ALWAYS:**
+- Use actual tokenization with cl100k_base encoding (GPT-4/GPT-3.5)
+- Use established, production-ready tokenizer libraries
+- Ensure tokenizer works offline with bundled data (no runtime downloads)
+- Have comprehensive tests that verify exact token counts
+- Fail tests if tokenization doesn't match expected counts
+- Initialize tokenizer at app startup for fail-fast behavior
+
+**Testing:**
+- Every build must pass tokenization accuracy tests
+- Test cases must verify exact token counts for known inputs
+- Use assertions in debug builds to catch tokenization issues early
+- Never modify tests to make them pass - fix the implementation
+
 ## Critical Reminders
 
 1. **Research, don't guess** - Use Context7 and web search
@@ -175,5 +202,6 @@ xcodebuild test -scheme "codecontext"   # Tests pass
 3. **Fix code, not tests** - Implementation should match expectations
 4. **Report failures** - Don't hide problems
 5. **Quality over speed** - Do it right the first time
+6. **Tokenization accuracy** - Must be 100% accurate, no estimation
 
 Remember: When encountering failing tests, FIRST report to the user, don't try to make them pass.
