@@ -17,20 +17,25 @@ struct FileTreeView: NSViewRepresentable {
         let scrollView = NSScrollView()
         let outlineView = QuickLookOutlineView()
 
-        // Configure outline view
+        // Configure outline view for complete transparency
         outlineView.configureStandardSettings()
         configureColumns(for: outlineView)
+        outlineView.backgroundColor = .clear
+        outlineView.enclosingScrollView?.backgroundColor = .clear
 
         // Set up coordinator
         context.coordinator.setupOutlineView(outlineView)
 
-        // Configure scroll view
+        // Configure scroll view for complete transparency
         scrollView.documentView = outlineView
         scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = true
         scrollView.autohidesScrollers = true
         scrollView.contentInsets = NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
         scrollView.automaticallyAdjustsContentInsets = false
+        scrollView.backgroundColor = .clear
+        scrollView.drawsBackground = false
+        scrollView.contentView.backgroundColor = .clear
 
         return scrollView
     }
@@ -266,10 +271,17 @@ struct FileTreeContainer: View {
     }
 
     private func handleSelectionChange(_ node: FileNode) {
-        Task { @MainActor in
-            fileTreeModel.updateSelection(node)
-            WorkspaceLoader.updateSelection(workspace: workspace, fileTreeModel: fileTreeModel)
-            selectedTokenCount = fileTreeModel.totalSelectedTokens
+        // Process selection off main thread
+        Task.detached(priority: .userInitiated) {
+            // Update selection without blocking UI
+            await fileTreeModel.updateSelection(node)
+
+            // Update workspace asynchronously
+            await MainActor.run {
+                WorkspaceLoader.updateSelection(workspace: workspace, fileTreeModel: fileTreeModel)
+            }
+
+            // Token count will be updated asynchronously by SelectionManager
         }
     }
 

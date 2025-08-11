@@ -5,9 +5,9 @@ struct ExclusionNotificationView: View {
     let notification: NotificationSystem.ExclusionNotification
     let onInclude: () -> Void
     let onDismiss: () -> Void
-    
+
     @State private var isExpanded = false
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             // Header with title and controls
@@ -15,7 +15,7 @@ struct ExclusionNotificationView: View {
                 // Status icon
                 Image(systemName: "exclamationmark.triangle.fill")
                     .foregroundStyle(.orange)
-                
+
                 VStack(alignment: .leading, spacing: 2) {
                     Text(notification.title)
                         .font(.headline)
@@ -23,17 +23,14 @@ struct ExclusionNotificationView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                
+
                 Spacer()
-                
+
                 // Action buttons
                 HStack(spacing: 8) {
-                    Button("Include") {
-                        onInclude()
-                    }
-                    .buttonStyle(.glass)
-                    .controlSize(.small)
-                    
+                    GlassButton(title: "Include", action: onInclude)
+                        .controlSize(.small)
+
                     Button(action: onDismiss) {
                         Image(systemName: "xmark")
                             .font(.caption)
@@ -42,11 +39,11 @@ struct ExclusionNotificationView: View {
                     .foregroundStyle(.secondary)
                 }
             }
-            
+
             // Expandable details
             if isExpanded {
                 Divider()
-                
+
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 4) {
                         ForEach(notification.exclusions, id: \.url) { exclusion in
@@ -56,7 +53,7 @@ struct ExclusionNotificationView: View {
                 }
                 .frame(maxHeight: 200)
             }
-            
+
             // Always show expand/collapse toggle if there are exclusions
             if !notification.exclusions.isEmpty {
                 Button(action: { isExpanded.toggle() }) {
@@ -83,26 +80,26 @@ struct ExclusionNotificationView: View {
 /// Individual exclusion detail row
 private struct ExclusionDetailRow: View {
     let exclusion: ExclusionDetector.ExclusionResult
-    
+
     var body: some View {
         HStack {
             // File type icon
             Image(systemName: exclusion.exclusionType.iconName)
                 .foregroundStyle(exclusion.exclusionType.iconColor)
                 .frame(width: 16)
-            
+
             VStack(alignment: .leading, spacing: 1) {
                 Text(exclusion.url.lastPathComponent)
                     .font(.caption)
                     .lineLimit(1)
-                
+
                 Text(exclusion.exclusionType.displayReason)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
-            
+
             Spacer()
-            
+
             if !exclusion.canOverride {
                 Image(systemName: "lock.fill")
                     .font(.caption2)
@@ -121,7 +118,7 @@ private extension ExclusionDetector.ExclusionType {
             return "doc.plaintext"
         case .tooLarge:
             return "doc.badge.plus"
-        case .sensitiveFile(let reason):
+        case let .sensitiveFile(reason):
             switch reason {
             case .dotenvFile:
                 return "gearshape.fill"
@@ -132,7 +129,7 @@ private extension ExclusionDetector.ExclusionType {
             }
         }
     }
-    
+
     var iconColor: Color {
         switch self {
         case .binary:
@@ -160,17 +157,17 @@ private extension ExclusionDetector.ExclusionType {
                     ExclusionDetector.ExclusionResult(
                         url: URL(filePath: "/path/to/.env"),
                         exclusionType: .sensitiveFile(reason: .dotenvFile)
-                    )
+                    ),
                 ]
             ),
             onInclude: {},
             onDismiss: {}
         )
-        
+
         // Preview with many exclusions
         ExclusionNotificationView(
             notification: NotificationSystem.ExclusionNotification(
-                exclusions: Array(0..<8).map { i in
+                exclusions: Array(0 ..< 8).map { i in
                     ExclusionDetector.ExclusionResult(
                         url: URL(filePath: "/path/to/file\(i).bin"),
                         exclusionType: .binary

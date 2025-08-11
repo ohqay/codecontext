@@ -9,34 +9,38 @@ struct SidebarView: View {
     @Binding var filterFocused: Bool
     @Binding var selectedTokenCount: Int
 
-    @State private var filterText: String = ""
+    @State private var searchText: String = ""
     @State private var showWorkspaceList = false
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Show file tree for selected workspace
-            if let workspace = selection {
-                // File tree view with filter and options
-                VStack(spacing: 0) {
-                    FilterBar(text: $filterText, focused: $filterFocused)
-                    Divider()
+        ZStack {
+            // Ensure consistent background
+            Color.clear
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            VStack(spacing: 0) {
+                // Show file tree for selected workspace
+                if let workspace = selection {
+                    // File tree view with search and options
+                    LiquidGlassSearchBar(
+                        text: $searchText,
+                        prompt: "Search files",
+                        focused: $filterFocused
+                    )
+                    .searchBarPadding()
+
                     FileTreeContainer(
                         workspace: Binding(
                             get: { workspace },
                             set: { selection = $0 }
-                        ), filterText: $filterText, selectedTokenCount: $selectedTokenCount)
-                }
-            } else {
-                // Empty state - prompt to open folder
-                VStack {
-                    Spacer()
-                    Image(systemName: "folder.badge.plus")
-                        .font(.system(size: 48))
-                        .foregroundStyle(.secondary)
-                    Text("No Folder Open")
-                        .font(.headline)
-                        .padding(.top, 8)
-                    Spacer()
+                        ), filterText: $searchText, selectedTokenCount: $selectedTokenCount
+                    )
+                } else {
+                    // Empty state - prompt to open folder
+                    EmptyStateView(
+                        title: "No Folder Open",
+                        subtitle: "Open a folder to begin"
+                    )
                 }
             }
         }
@@ -44,44 +48,19 @@ struct SidebarView: View {
     }
 }
 
-private struct FilterBar: View {
-    @Binding var text: String
-    @Binding var focused: Bool
-    @FocusState private var isFocused: Bool
-
-    var body: some View {
-        HStack {
-            Image(systemName: "magnifyingglass")
-                .foregroundStyle(.secondary)
-            TextField("Search files", text: $text)
-                .textFieldStyle(.plain)
-                .focused($isFocused)
-        }
-        .padding(8)
-        .background(.bar)
-        .onChange(of: focused) { _, newValue in
-            if newValue {
-                isFocused = true
-                focused = false
-            }
-        }
-    }
-}
+// MARK: - Toolbar
 
 private struct SidebarToolbar: ToolbarContent {
     @Environment(\.modelContext) private var modelContext
     @Binding var selection: SDWorkspace?
     @State private var showFiltersPopover = false
-    
+
     var body: some ToolbarContent {
         ToolbarItem(placement: .automatic) {
-            Button(action: {
-                showFiltersPopover.toggle()
-            }) {
-                Image(systemName: "line.3.horizontal.decrease.circle")
-                    .font(.system(size: 16, weight: .regular))
-            }
-            .buttonStyle(.glass)
+            GlassButton(
+                systemImage: "line.3.horizontal.decrease.circle",
+                action: { showFiltersPopover.toggle() }
+            )
             .help("Filters")
             .popover(isPresented: $showFiltersPopover, arrowEdge: .bottom) {
                 VStack(alignment: .leading, spacing: 4) {
@@ -92,7 +71,16 @@ private struct SidebarToolbar: ToolbarContent {
             }
         }
         ToolbarItem(placement: .automatic) {
-            Button(action: {
+            GlassButton(
+                systemImage: "arrow.clockwise",
+                action: { NotificationCenter.default.post(name: .requestRefresh, object: nil) }
+            )
+            .help("Refresh (⌘R)")
+        }
+        ToolbarItem(placement: .automatic) {
+            GlassButton(
+                systemImage: "folder.badge.plus"
+            ) {
                 if let workspace = FolderPicker.openFolder(modelContext: modelContext) {
                     // Force SwiftData to refresh
                     try? modelContext.save()
@@ -101,12 +89,8 @@ private struct SidebarToolbar: ToolbarContent {
                         selection = workspace
                     }
                 }
-            }) {
-                Image(systemName: "folder.badge.plus")
-                    .font(.system(size: 16, weight: .regular))
             }
-            .buttonStyle(.glass)
-            .help("Open Folder")
+            .help("Open Folder (⌘O)")
         }
     }
 }
@@ -133,11 +117,21 @@ private struct FiltersMenu: View {
         ]
 
     var body: some View {
-        ForEach(0..<filterConfigs.count) { section in
-            if section == 1 {
-                Divider()
+        VStack(alignment: .leading, spacing: 4) {
+            // Section 0: Respect rules
+            ForEach(filterConfigs.filter { $0.section == 0 }, id: \.title) { config in
+                FilterToggle(
+                    title: config.title,
+                    preference: prefs.first,
+                    keyPath: config.keyPath,
+                    onUpdate: update
+                )
             }
-            ForEach(filterConfigs.filter { $0.section == section }, id: \.title) { config in
+
+            Divider()
+
+            // Section 1: Exclude rules
+            ForEach(filterConfigs.filter { $0.section == 1 }, id: \.title) { config in
                 FilterToggle(
                     title: config.title,
                     preference: prefs.first,
@@ -169,6 +163,7 @@ private struct FilterToggle: View {
             isOn: Binding(
                 get: { preference?[keyPath: keyPath] ?? true },
                 set: { _ in onUpdate { $0[keyPath: keyPath].toggle() } }
-            ))
+            )
+        )
     }
 }

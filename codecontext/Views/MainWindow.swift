@@ -31,6 +31,7 @@ struct MainWindow: View {
                 )
             )
             .navigationSplitViewColumnWidth(min: 280, ideal: 400, max: 600)
+            .navigationSplitViewStyle(.balanced)
             .toolbar(removing: .sidebarToggle)
         } detail: {
             if let selectedWorkspace = selection {
@@ -58,19 +59,17 @@ struct MainWindow: View {
                 toggleFileTree: { appState.includeFileTreeInOutput.toggle() },
                 refresh: triggerRefresh,
                 focusFilter: { filterFocused = true },
-                toggleSidebar: toggleSidebar
+                toggleSidebar: toggleSidebar,
             )
         )
         .toolbar {
             ToolbarItem(placement: .navigation) {
-                Button(action: toggleSidebar) {
-                    Image(
-                        systemName: columnVisibility == .detailOnly
-                            ? "sidebar.left" : "sidebar.left"
-                    )
-                    .symbolVariant(columnVisibility == .detailOnly ? .none : .fill)
-                    .help(columnVisibility == .detailOnly ? "Show Sidebar" : "Hide Sidebar")
-                }
+                GlassButton(
+                    systemImage: "sidebar.left",
+                    action: toggleSidebar
+                )
+                .symbolVariant(columnVisibility == .detailOnly ? .none : .fill)
+                .help(columnVisibility == .detailOnly ? "Show Sidebar" : "Hide Sidebar")
             }
         }
         .onAppear {
@@ -99,7 +98,7 @@ struct MainWindow: View {
         DispatchQueue.main.async {
             if let window = NSApp.keyWindow {
                 window.tabbingMode = .preferred
-                window.titleVisibility = .visible
+                window.titleVisibility = .hidden
 
                 // Set window title based on workspace
                 if let workspace = selection {
@@ -149,66 +148,90 @@ private struct EmptySelectionView: View {
     @Binding var selection: SDWorkspace?
 
     var body: some View {
-        ContentPlaceholder {
-            VStack(spacing: 16) {
-                Text("Open a folder to begin")
-                GlassButton(
-                    title: "Open Folder",
-                    hint: "⌘O",
-                    isProminent: true,
-                    action: {
-                        if let workspace = FolderPicker.openFolder(modelContext: modelContext) {
-                            // Force SwiftData to refresh
-                            try? modelContext.save()
-                            // Small delay to ensure SwiftData updates
-                            DispatchQueue.main.async {
-                                selection = workspace
-                            }
-                        }
+        EmptyStateView(
+            icon: "folder.badge.plus",
+            title: "No Folder Selected",
+            action: {
+                if let workspace = FolderPicker.openFolder(modelContext: modelContext) {
+                    // Force SwiftData to refresh
+                    try? modelContext.save()
+                    // Small delay to ensure SwiftData updates
+                    DispatchQueue.main.async {
+                        selection = workspace
                     }
-                )
-            }
-        }
+                }
+            },
+            actionTitle: "Open Folder",
+            actionHint: "⌘O",
+            isActionProminent: true
+        )
     }
 }
 
+// MARK: - Glass Button
+
 struct GlassButton: View {
-    let title: String
+    let title: String?
     let hint: String?
+    let systemImage: String?
+    let imageFontSize: CGFloat
     let isProminent: Bool
+    let isHoverable: Bool
     let action: () -> Void
-    
+
+    @State private var isHovered = false
+
     init(
-        title: String,
+        title: String? = nil,
         hint: String? = nil,
+        systemImage: String? = nil,
+        imageFontSize: CGFloat = 16,
         isProminent: Bool = false,
+        isHoverable: Bool = true,
         action: @escaping () -> Void
     ) {
         self.title = title
         self.hint = hint
+        self.systemImage = systemImage
+        self.imageFontSize = imageFontSize
         self.isProminent = isProminent
+        self.isHoverable = isHoverable
         self.action = action
     }
-    
+
     var body: some View {
         Button(action: action) {
             HStack(spacing: 6) {
-                Text(title)
+                if let systemImage = systemImage {
+                    Image(systemName: systemImage)
+                        .font(.system(size: imageFontSize, weight: .regular))
+                        .foregroundStyle(.primary)
+                }
+                if let title = title {
+                    Text(title)
+                }
                 if let hint = hint {
                     Text(hint)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(.secondary)
                 }
             }
         }
         .modifier(GlassButtonModifier(isProminent: isProminent))
         .cornerRadius(.greatestFiniteMagnitude)
         .focusEffectDisabled()
+        .scaleEffect(isHoverable && isHovered ? 1.03 : 1.0)
+        .animation(.easeInOut(duration: 0.10), value: isHovered)
+        .onHover { hovering in
+            if isHoverable {
+                isHovered = hovering
+            }
+        }
     }
 }
 
 private struct GlassButtonModifier: ViewModifier {
     let isProminent: Bool
-    
+
     @ViewBuilder
     func body(content: Content) -> some View {
         if isProminent {

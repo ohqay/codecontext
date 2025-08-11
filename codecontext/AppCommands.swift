@@ -5,27 +5,28 @@ struct AppCommands: Commands {
 
     var body: some Commands {
         CommandGroup(replacing: .newItem) {
-            Button("New Tab") { actions?.newTab() }
+            Button("New Tab", systemImage: "plus.rectangle.on.rectangle") { actions?.newTab() }
                 .keyboardShortcut("t")
-            Button("Open Folder…") { actions?.openFolder() }
+            Button("Open Folder…", systemImage: "folder.badge.plus") { actions?.openFolder() }
                 .keyboardShortcut("o")
         }
 
         CommandMenu("Codebase") {
-            Button("Copy XML Output") { actions?.copyOutput() }
+            Button("Copy XML Output", systemImage: "doc.on.clipboard") { actions?.copyOutput() }
                 .keyboardShortcut("c", modifiers: [.command, .shift])
-            Button("Toggle File Tree in Output") { actions?.toggleFileTree() }
+            Button("Toggle File Tree in Output", systemImage: "list.bullet.indent") { actions?.toggleFileTree() }
                 .keyboardShortcut("b")
-            Button("Refresh") { actions?.refresh() }
+            Button("Refresh", systemImage: "arrow.clockwise") { actions?.refresh() }
                 .keyboardShortcut("r")
             Divider()
-            Button("Filter Files") { actions?.focusFilter() }
+            Button("Filter Files", systemImage: "line.3.horizontal.decrease.circle") { actions?.focusFilter() }
                 .keyboardShortcut("f")
         }
 
-        CommandMenu("View") {
-            Button("Toggle Sidebar") { actions?.toggleSidebar() }
+        CommandGroup(before: .toolbar) {
+            Button("Toggle Sidebar", systemImage: "sidebar.left") { actions?.toggleSidebar() }
                 .keyboardShortcut("\\")
+            Divider()
         }
     }
 }
@@ -50,5 +51,22 @@ struct WorkspaceActions {
     let refresh: () -> Void
     let focusFilter: () -> Void
     let toggleSidebar: () -> Void
-}
 
+    init(
+        newTab: @escaping () -> Void,
+        openFolder: @escaping () -> Void,
+        copyOutput: @escaping () -> Void,
+        toggleFileTree: @escaping () -> Void,
+        refresh: @escaping () -> Void,
+        focusFilter: @escaping () -> Void,
+        toggleSidebar: @escaping () -> Void,
+    ) {
+        self.newTab = newTab
+        self.openFolder = openFolder
+        self.copyOutput = copyOutput
+        self.toggleFileTree = toggleFileTree
+        self.refresh = refresh
+        self.focusFilter = focusFilter
+        self.toggleSidebar = toggleSidebar
+    }
+}

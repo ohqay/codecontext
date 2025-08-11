@@ -1,5 +1,5 @@
-import SwiftUI
 import QuickLookUI
+import SwiftUI
 
 // Quick Look preview for file content
 struct QuickLookView: View {
@@ -7,7 +7,7 @@ struct QuickLookView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var fileContent: String = ""
     @State private var isLoading = true
-    
+
     var body: some View {
         VStack(spacing: 0) {
             // Header
@@ -31,9 +31,9 @@ struct QuickLookView: View {
             }
             .padding()
             .background(.bar)
-            
+
             Divider()
-            
+
             // Content
             if isLoading {
                 ProgressView()
@@ -63,21 +63,22 @@ struct QuickLookView: View {
             return .handled
         }
     }
-    
+
     private func loadFileContent() async {
         defer { isLoading = false }
-        
+
         guard let data = try? Data(contentsOf: fileNode.url),
-              let content = String(data: data, encoding: .utf8) else {
+              let content = String(data: data, encoding: .utf8)
+        else {
             fileContent = "Unable to load file content"
             return
         }
-        
+
         // Apply syntax highlighting if possible
         fileContent = applySyntaxHighlighting(to: content, language: LanguageMap.languageHint(for: fileNode.url))
     }
-    
-    private func applySyntaxHighlighting(to content: String, language: String) -> String {
+
+    private func applySyntaxHighlighting(to content: String, language _: String) -> String {
         // For now, return plain text
         // In a production app, you'd use a syntax highlighting library
         return content
@@ -87,10 +88,10 @@ struct QuickLookView: View {
 // Alternative implementation using QLPreviewPanel for native Quick Look
 struct NativeQuickLookView: NSViewRepresentable {
     let fileURL: URL
-    
-    func makeNSView(context: Context) -> NSView {
+
+    func makeNSView(context _: Context) -> NSView {
         let view = NSView()
-        
+
         // Use Quick Look panel
         DispatchQueue.main.async {
             if QLPreviewPanel.sharedPreviewPanelExists() {
@@ -99,15 +100,15 @@ struct NativeQuickLookView: NSViewRepresentable {
                 panel?.reloadData()
             }
         }
-        
+
         return view
     }
-    
-    func updateNSView(_ nsView: NSView, context: Context) {
+
+    func updateNSView(_: NSView, context _: Context) {
         // No updates needed
     }
-    
-    static func showQuickLook(for url: URL) {
+
+    static func showQuickLook(for _: URL) {
         let panel = QLPreviewPanel.shared()
         panel?.makeKeyAndOrderFront(nil)
         panel?.reloadData()

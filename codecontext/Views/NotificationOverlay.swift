@@ -3,14 +3,14 @@ import SwiftUI
 /// Overlay container for notifications that appear on top of the main interface
 struct NotificationOverlay: View {
     @Environment(NotificationSystem.self) private var notificationSystem
-    
+
     var body: some View {
         VStack {
             // Top notifications area
             if let notification = notificationSystem.currentNotification {
                 HStack {
                     Spacer()
-                    
+
                     ExclusionNotificationView(
                         notification: notification,
                         onInclude: {
@@ -32,13 +32,13 @@ struct NotificationOverlay: View {
                         removal: .move(edge: .top).combined(with: .opacity)
                     ))
                     .animation(.easeInOut(duration: 0.3), value: notification.id)
-                    
+
                     Spacer()
                 }
                 .padding(.top, 20)
                 .padding(.horizontal, 20)
             }
-            
+
             Spacer()
         }
         .allowsHitTesting(notificationSystem.currentNotification != nil)
