@@ -75,4 +75,3 @@ final class SDWorkspace {
         self.lastOpenedAt = lastOpenedAt
     }
 }
-

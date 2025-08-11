@@ -54,4 +54,3 @@ final class SDPreference {
         self.includeFileTreeInOutput = includeFileTreeInOutput
     }
 }
-

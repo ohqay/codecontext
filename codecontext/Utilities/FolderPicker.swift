@@ -15,7 +15,7 @@ enum FolderPicker {
                 // Check if workspace already exists for this path
                 let fetch = FetchDescriptor<SDWorkspace>()
                 let allWorkspaces = try modelContext.fetch(fetch)
-                
+
                 if let existingWorkspace = allWorkspaces.first(where: { $0.originalPath == url.path }) {
                     // Update last opened date for existing workspace
                     existingWorkspace.lastOpenedAt = .now
