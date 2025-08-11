@@ -1,0 +1,21 @@
+[package]
+name = "tokenizer_ffi"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "tokenizer_ffi"
+crate-type = ["staticlib"]
+
+[dependencies]
+tiktoken-rs = "0.6"
+libc = "0.2"
+
+[build-dependencies]
+cbindgen = "0.26"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
