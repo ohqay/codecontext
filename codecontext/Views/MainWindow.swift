@@ -75,6 +75,7 @@ struct MainWindow: View {
         .onAppear {
             ensureDefaultPreference()
             configureWindowForTabs()
+            restoreLastSessionIfNeeded()
         }
         .onChange(of: selection) { _, newWorkspace in
             print("MainWindow: Selection changed to \(newWorkspace?.name ?? "nil")")
@@ -83,6 +84,9 @@ struct MainWindow: View {
                 workspace.lastOpenedAt = .now
                 try? modelContext.save()
             }
+
+            // Save the current session for restoration
+            SessionManager.shared.saveCurrentSession(workspace: newWorkspace, modelContext: modelContext)
         }
     }
 
@@ -90,6 +94,22 @@ struct MainWindow: View {
         let fetch = FetchDescriptor<SDPreference>()
         if (try? modelContext.fetch(fetch))?.isEmpty ?? true {
             modelContext.insert(SDPreference())
+        }
+    }
+
+    private func restoreLastSessionIfNeeded() {
+        // Only restore if no workspace is currently selected and we have workspaces available
+        guard selection == nil, !workspaces.isEmpty else {
+            return
+        }
+
+        // Attempt to restore the last session
+        if let restoredWorkspace = SessionManager.shared.restoreLastSession(modelContext: modelContext) {
+            // Use a small delay to ensure the UI is ready
+            DispatchQueue.main.async {
+                self.selection = restoredWorkspace
+                print("[MainWindow] Auto-restored workspace: \(restoredWorkspace.name)")
+            }
         }
     }
 

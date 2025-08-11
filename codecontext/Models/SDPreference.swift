@@ -24,6 +24,10 @@ final class SDPreference {
     // Output options
     var includeFileTreeInOutput: Bool
 
+    // Session restoration options
+    var enableSessionRestoration: Bool
+    var lastActiveWorkspaceID: String?
+
     init(
         id: String = "global",
         defaultRespectGitIgnore: Bool = true,
@@ -37,7 +41,9 @@ final class SDPreference {
         defaultExcludeVenv: Bool = true,
         defaultExcludeDSStore: Bool = true,
         defaultExcludeDerivedData: Bool = true,
-        includeFileTreeInOutput: Bool = false
+        includeFileTreeInOutput: Bool = false,
+        enableSessionRestoration: Bool = true,
+        lastActiveWorkspaceID: String? = nil
     ) {
         self.id = id
         self.defaultRespectGitIgnore = defaultRespectGitIgnore
@@ -52,5 +58,7 @@ final class SDPreference {
         self.defaultExcludeDSStore = defaultExcludeDSStore
         self.defaultExcludeDerivedData = defaultExcludeDerivedData
         self.includeFileTreeInOutput = includeFileTreeInOutput
+        self.enableSessionRestoration = enableSessionRestoration
+        self.lastActiveWorkspaceID = lastActiveWorkspaceID
     }
 }
