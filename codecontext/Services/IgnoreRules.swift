@@ -54,9 +54,9 @@ struct IgnoreRules: Sendable {
             ".tox", ".coverage", ".pytest_cache", ".mypy_cache",
             "build", "dist", "*.egg-info",
 
-            // Swift/iOS/macOS
-            "DerivedData", ".build", "*.xcworkspace", "*.dSYM",
-            "*.app", "*.ipa", "Pods",
+            // Swift/iOS/macOS (exclude actual build products, not project files)
+            "DerivedData", ".build", "*.dSYM", "*.app", "*.ipa", "Pods",
+            "xcuserdata", "*.xcuserdatad",
 
             // Java/Kotlin/Android
             ".gradle", "build", "target", ".idea",
@@ -115,17 +115,20 @@ struct IgnoreRules: Sendable {
 
         // Check for hidden files
         if !showHiddenFiles && filename.hasPrefix(".") {
+            logIgnoreReason(path: path, reason: "hidden file (showHiddenFiles=false)")
             return true
         }
 
         // Check default exclusions
         if defaultExclusions.contains(filename) {
+            logIgnoreReason(path: path, reason: "default exclusion: \(filename)")
             return true
         }
 
         // Check custom patterns
         for pattern in customPatterns {
             if matches(pattern: pattern, path: path, isDirectory: isDirectory) {
+                logIgnoreReason(path: path, reason: "custom pattern: \(pattern)")
                 return true
             }
         }
@@ -136,21 +139,36 @@ struct IgnoreRules: Sendable {
         // Check gitignore patterns
         if respectGitIgnore {
             let gitignoreResult = evaluatePatterns(gitignorePatterns, against: relativePath, isDirectory: isDirectory)
-            if gitignoreResult != nil {
-                return gitignoreResult!
+            if let result = gitignoreResult {
+                logIgnoreReason(path: path, reason: "gitignore pattern (result: \(result))")
+                return result
             }
         }
 
         // Check .ignore patterns
         if respectDotIgnore {
             let dotignoreResult = evaluatePatterns(dotignorePatterns, against: relativePath, isDirectory: isDirectory)
-            if dotignoreResult != nil {
-                return dotignoreResult!
+            if let result = dotignoreResult {
+                logIgnoreReason(path: path, reason: ".ignore pattern (result: \(result))")
+                return result
             }
         }
 
         return false
     }
+
+    #if DEBUG
+        private func logIgnoreReason(path: String, reason: String) {
+            let filename = URL(fileURLWithPath: path).lastPathComponent
+            if filename.contains("pbxproj") || filename.contains("xcodeproj") {
+                print("[IgnoreRules] Ignoring \(filename): \(reason)")
+            }
+        }
+    #else
+        private func logIgnoreReason(path _: String, reason _: String) {
+            // No-op in release builds
+        }
+    #endif
 
     private func getRelativePath(fullPath: String) -> String {
         guard !rootPath.isEmpty, fullPath.hasPrefix(rootPath) else {
@@ -179,18 +197,26 @@ struct IgnoreRules: Sendable {
     }
 
     private func matches(pattern: String, path: String, isDirectory _: Bool) -> Bool {
-        // Minimal glob-style matching: supports leading/trailing * and suffix matches
+        // Improved glob-style matching: handles file extensions and path components correctly
+        let filename = URL(fileURLWithPath: path).lastPathComponent
+
         if pattern.hasPrefix("*") && pattern.hasSuffix("*") {
             let token = String(pattern.dropFirst().dropLast())
-            return path.contains(token)
+            return filename.contains(token)
         } else if pattern.hasPrefix("*") {
             let token = String(pattern.dropFirst())
-            return path.hasSuffix(token)
+            // For patterns like *.xcworkspace, match file extensions properly
+            if token.hasPrefix(".") {
+                return filename.hasSuffix(token)
+            } else {
+                return filename.hasSuffix(token)
+            }
         } else if pattern.hasSuffix("*") {
             let token = String(pattern.dropLast())
-            return path.hasPrefix(token)
+            return filename.hasPrefix(token)
         } else {
-            return path.contains(pattern)
+            // Exact match against filename or path component
+            return filename == pattern || path.contains(pattern)
         }
     }
 

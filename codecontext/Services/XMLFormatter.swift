@@ -110,9 +110,10 @@ struct XMLFormatterService: Sendable {
                     return false
                 }
 
-                // Swift/iOS build artifacts
+                // Swift/iOS build artifacts (exclude build products, not project files)
                 if component == "DerivedData" || component == ".build" ||
-                    component.hasSuffix(".xcworkspace") || component.hasSuffix(".dSYM")
+                    component.hasSuffix(".dSYM") || component.hasSuffix(".app") ||
+                    component == "xcuserdata"
                 {
                     return false
                 }
