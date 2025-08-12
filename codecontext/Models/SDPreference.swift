@@ -25,7 +25,7 @@ final class SDPreference {
     var includeFileTreeInOutput: Bool
 
     // Session restoration options
-    var enableSessionRestoration: Bool
+    var enableSessionRestoration: Bool = true
     var lastActiveWorkspaceID: String?
 
     init(
