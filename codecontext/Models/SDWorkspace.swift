@@ -5,7 +5,7 @@ import SwiftData
 @Model
 final class SDWorkspace {
     // Unique identifier for this workspace
-    var id: String
+    var id: String = ""
 
     // Human-readable display name
     var name: String
@@ -60,7 +60,7 @@ final class SDWorkspace {
         selectionJSON: String = "{}",
         lastOpenedAt: Date = .now
     ) {
-        self.id = id
+        self.id = id.isEmpty ? UUID().uuidString : id
         self.name = name
         self.originalPath = originalPath
         self.bookmark = bookmark
