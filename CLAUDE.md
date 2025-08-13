@@ -161,12 +161,39 @@ xcodebuild test -scheme "codecontext"   # Tests pass
 - Hardcode to pass tests
 - Ignore errors
 - Hide test failures
+- **Implement fallbacks to bad approaches**
+- **Write "try good approach, fall back to bad approach" code**
+- **Leave performance problems as fallback paths**
 
 **ALWAYS:**
 - Understand root causes
 - Implement proper logic
 - Handle errors appropriately
 - Report failures transparently
+- **Commit fully to the correct implementation**
+- **Fix performance issues completely, not partially**
+- **Trust your implementation and test it thoroughly**
+
+## No Fallback to Previous Implementation (CRITICAL)
+
+**NEVER implement "try new approach, fall back to old approach" patterns**. When replacing or optimizing an implementation, commit fully to the new approach. Examples of this anti-pattern:
+- "Try incremental update, fall back to full regeneration if it fails"
+- "Try optimized algorithm, fall back to original algorithm on error"
+- "If new implementation fails, use previous implementation"
+
+**Why this is unacceptable:**
+- Any bug in the new implementation means the improvement never takes effect
+- Performance problems remain hidden behind try-catch blocks
+- Creates false confidence that the issue is "resolved"
+- Makes debugging harder - failures become silent performance degradation
+- Encourages incomplete implementations with untested edge cases
+
+**Instead:**
+- Fully replace the old implementation with the new one
+- Fix bugs in the new implementation rather than bypassing them
+- Write comprehensive tests to ensure the new approach handles all cases
+- Remove the old implementation code completely
+- If the new implementation has issues, fix them - don't hide them
 
 ## Tokenization Integrity (CRITICAL)
 
