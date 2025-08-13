@@ -68,7 +68,8 @@ actor StreamingContextEngine {
         removedPaths: Set<String>,
         allFiles: [FileInfo],
         includeTree: Bool,
-        rootURL: URL
+        rootURL: URL,
+        userInstructions: String = ""
     ) async throws -> GenerationResult {
         let startTime = Date()
         logDebug("Incremental update", details: "Added: \(addedPaths.count), Removed: \(removedPaths.count)")
@@ -126,7 +127,12 @@ actor StreamingContextEngine {
             updatedXML = updateFileTreeInXML(updatedXML, newTree: treeXML)
         }
 
-        // Calculate token count for updated XML
+        // Wrap with user instructions if provided
+        if !userInstructions.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            updatedXML = wrapWithUserInstructions(updatedXML, instructions: userInstructions)
+        }
+        
+        // Calculate token count for final XML
         updatedTokenCount = await TokenizerService.shared.countTokens(updatedXML)
 
         let duration = Date().timeIntervalSince(startTime)
@@ -138,6 +144,13 @@ actor StreamingContextEngine {
             filesProcessed: addedPaths.count,
             generationTime: duration
         )
+    }
+
+    // Helper method to wrap context XML with user instructions at top and bottom
+    private func wrapWithUserInstructions(_ xml: String, instructions: String) -> String {
+        let instructionsXML = "<userInstructions>\n\(instructions)\n</userInstructions>\n\n"
+        let wrappedXML = instructionsXML + xml + "\n" + instructionsXML
+        return wrappedXML
     }
 
     // Helper method to remove a file section from XML

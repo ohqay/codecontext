@@ -26,15 +26,41 @@ struct WorkspaceDetailView: View {
                 .background(.thinMaterial)
                 .backgroundExtensionEffect()
 
-            VStack(spacing: 0) {
-                OutputHeader(
-                    includeFileTree: $includeFileTree,
-                    selectedFileCount: selectedFileCount,
-                    selectedTokenCount: selectedTokenCount
-                )
-                Divider()
-
-                OutputPreview(text: output)
+            VStack(spacing: 20) {
+                // User Instructions Section
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Instructions")
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                    
+                    UserInstructionsEditor(
+                        text: Binding(
+                            get: { workspace.userInstructions },
+                            set: { workspace.userInstructions = $0 }
+                        )
+                    )
+                    .frame(height: 100)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 16)
+                
+                // Context Output Section  
+                VStack(alignment: .leading, spacing: 8) {
+                    OutputHeader(
+                        includeFileTree: $includeFileTree,
+                        selectedFileCount: selectedFileCount,
+                        selectedTokenCount: selectedTokenCount
+                    )
+                    
+                    OutputPreview(text: output)
+                        .frame(maxHeight: 300)
+                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+                }
+                .padding(.horizontal, 20)
+                .padding(.bottom, 20)
+                
+                Spacer()
             }
         }
         .toolbar { OutputToolbar() }
@@ -127,7 +153,8 @@ struct WorkspaceDetailView: View {
                 removedPaths: removedPaths,
                 allFiles: allFiles,
                 includeTree: includeFileTree,
-                rootURL: rootURL
+                rootURL: rootURL,
+                userInstructions: workspace.userInstructions
             )
 
             output = result.xml
@@ -259,7 +286,6 @@ private struct OutputPreview: View {
 
     var body: some View {
         PerformantTextView(text: text)
-            .background(.thinMaterial)
     }
 }
 

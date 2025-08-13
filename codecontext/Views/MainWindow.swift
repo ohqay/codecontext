@@ -62,6 +62,7 @@ struct MainWindow: View {
                 toggleSidebar: toggleSidebar,
             )
         )
+        .toolbar(removing: .title)
         .toolbar {
             ToolbarItem(placement: .navigation) {
                 GlassButton(
@@ -118,14 +119,6 @@ struct MainWindow: View {
         DispatchQueue.main.async {
             if let window = NSApp.keyWindow {
                 window.tabbingMode = .preferred
-                window.titleVisibility = .hidden
-
-                // Set window title based on workspace
-                if let workspace = selection {
-                    window.title = workspace.name
-                } else {
-                    window.title = "codecontext"
-                }
             }
         }
     }

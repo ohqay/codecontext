@@ -37,6 +37,9 @@ final class SDWorkspace {
     // JSON blob for selection state (path set); kept minimal and versionable
     var selectionJSON: String
 
+    // User instructions/prompt for this workspace
+    var userInstructions: String
+
     // Last opened date for recents ordering
     var lastOpenedAt: Date
 
@@ -58,6 +61,7 @@ final class SDWorkspace {
         excludeDerivedData: Bool = true,
         customIgnore: String = "",
         selectionJSON: String = "{}",
+        userInstructions: String = "",
         lastOpenedAt: Date = .now
     ) {
         self.id = id.isEmpty ? UUID().uuidString : id
@@ -77,6 +81,7 @@ final class SDWorkspace {
         self.excludeDerivedData = excludeDerivedData
         self.customIgnore = customIgnore
         self.selectionJSON = selectionJSON
+        self.userInstructions = userInstructions
         self.lastOpenedAt = lastOpenedAt
     }
 }
