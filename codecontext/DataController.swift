@@ -12,11 +12,11 @@ final class DataController {
             SDWorkspace.self,
             SDPreference.self,
         ])
-        
+
         do {
             // Try to create container with automatic migration
             let config = ModelConfiguration(
-                schema: schema, 
+                schema: schema,
                 isStoredInMemoryOnly: inMemory,
                 allowsSave: true,
                 groupContainer: .none,
@@ -26,7 +26,7 @@ final class DataController {
             print("[DataController] Successfully created ModelContainer")
         } catch {
             print("[DataController] Failed to create ModelContainer with error: \(error)")
-            
+
             // If migration fails, try creating a fresh container (this will lose existing data)
             // In a production app, you'd want more sophisticated migration handling
             do {
@@ -44,21 +44,21 @@ final class DataController {
                 fatalError("Failed to create fallback ModelContainer: \(error)")
             }
         }
-        
+
         // Perform any necessary data migrations after container creation
         performPostMigrationTasks()
     }
-    
+
     /// Perform any necessary data migrations or fixes after container creation
     private func performPostMigrationTasks() {
         Task { @MainActor in
             do {
                 let context = ModelContext(container)
-                
+
                 // Ensure all workspaces have IDs (migration from old schema)
                 let fetchDescriptor = FetchDescriptor<SDWorkspace>()
                 let workspaces = try context.fetch(fetchDescriptor)
-                
+
                 var needsSave = false
                 for workspace in workspaces {
                     if workspace.id.isEmpty {
@@ -67,12 +67,12 @@ final class DataController {
                         print("[DataController] Added ID to existing workspace: \(workspace.name)")
                     }
                 }
-                
+
                 if needsSave {
                     try context.save()
                     print("[DataController] Completed workspace ID migration")
                 }
-                
+
             } catch {
                 print("[DataController] Warning: Post-migration tasks failed: \(error)")
                 // Don't fatal error here, as this isn't critical

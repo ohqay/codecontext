@@ -28,7 +28,7 @@ enum LanguageMap {
         case "scss": return "scss"
         case "html", "htm": return "html"
         case "sql": return "sql"
-        default: return ""
+        default: return ext.isEmpty ? "text" : ext
         }
     }
 }

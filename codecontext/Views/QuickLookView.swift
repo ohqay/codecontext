@@ -39,14 +39,8 @@ struct QuickLookView: View {
                 ProgressView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                ScrollView {
-                    Text(fileContent)
-                        .font(.system(.body, design: .monospaced))
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding()
-                }
-                .background(Color(nsColor: .textBackgroundColor))
+                PerformantTextView(text: fileContent)
+                    .background(Color(nsColor: .textBackgroundColor))
             }
         }
         .frame(width: 800, height: 600)

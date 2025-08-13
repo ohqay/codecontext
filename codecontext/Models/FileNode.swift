@@ -220,14 +220,23 @@ final class FileTreeModel {
         let nodePath = node.url.path
         let (affectedPaths, affectedFiles) = collectAffectedPathsAndFiles(node: node)
 
+        // Cancel any existing selection task to prevent conflicts
+        selectionTask?.cancel()
+        
         // Handle selection asynchronously
         selectionTask = Task {
+            // Check for cancellation before heavy work
+            if Task.isCancelled { return }
+            
             // Update selection state off main thread
             let update = await selectionManager.toggleSelection(
                 for: nodePath,
                 affectedPaths: affectedPaths,
                 affectedFiles: affectedFiles
             )
+
+            // Check for cancellation before UI updates
+            if Task.isCancelled { return }
 
             // Apply UI updates in batch on main thread
             await MainActor.run {
@@ -236,11 +245,17 @@ final class FileTreeModel {
 
             // Calculate tokens in background (only for files)
             if !affectedFiles.isEmpty {
+                // Check for cancellation before expensive token calculation
+                if Task.isCancelled { return }
+                
                 let (_, selectedFiles, _) = await selectionManager.getSelectionState()
                 await selectionManager.updateTokenCounts(
                     for: selectedFiles,
                     tokenProcessor: tokenProcessor
                 )
+
+                // Check for cancellation before final UI update
+                if Task.isCancelled { return }
 
                 // Update token count on UI
                 let (_, _, tokens) = await selectionManager.getSelectionState()
@@ -254,8 +269,11 @@ final class FileTreeModel {
     private func collectAffectedPathsAndFiles(node: FileNode) -> (paths: Set<String>, files: Set<String>) {
         var paths = Set<String>()
         var files = Set<String>()
+        var nodeCount = 0
 
         func collect(_ n: FileNode) {
+            nodeCount += 1
+            
             // Add to paths (all nodes)
             paths.insert(n.url.path)
 
@@ -271,6 +289,12 @@ final class FileTreeModel {
         }
 
         collect(node)
+        
+        // Log performance info for large operations
+        if nodeCount > 1000 {
+            print("[FileNode] Large folder selection: \(nodeCount) nodes, \(files.count) files")
+        }
+        
         return (paths, files)
     }
 

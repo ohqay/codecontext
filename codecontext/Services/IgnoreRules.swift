@@ -50,7 +50,7 @@ private enum BuildArtifacts {
         ".vscode", ".idea", "*.swp", "*.swo", "*~",
 
         // Package managers
-        "yarn.lock", "package-lock.json", "pnpm-lock.yaml"
+        "yarn.lock", "package-lock.json", "pnpm-lock.yaml",
     ]
 }
 
@@ -280,13 +280,15 @@ struct IgnoreRules: Sendable {
     private func evaluateIgnorePatterns(relativePath: String, isDirectory: Bool) -> Bool? {
         // Check gitignore patterns first (if enabled)
         if respectGitIgnore,
-           let gitResult = evaluatePatterns(gitignorePatterns, against: relativePath, isDirectory: isDirectory) {
+           let gitResult = evaluatePatterns(gitignorePatterns, against: relativePath, isDirectory: isDirectory)
+        {
             return gitResult
         }
 
         // Check .ignore patterns (if enabled)
         if respectDotIgnore,
-           let ignoreResult = evaluatePatterns(dotignorePatterns, against: relativePath, isDirectory: isDirectory) {
+           let ignoreResult = evaluatePatterns(dotignorePatterns, against: relativePath, isDirectory: isDirectory)
+        {
             return ignoreResult
         }
 
