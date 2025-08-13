@@ -16,6 +16,8 @@ struct WorkspaceDetailView: View {
     @State private var lastSelectionJSON: String = ""
     @State private var selectedFileCount = 0
     @State private var allFiles: [FileInfo] = []
+    @State private var previousSelectedPaths: Set<String> = []
+    @State private var lastGeneratedXML: String = ""
 
     var body: some View {
         ZStack {
@@ -67,9 +69,6 @@ struct WorkspaceDetailView: View {
     private func regenerateOutput() async {
         let startTime = Date()
 
-        // Don't regenerate if a task is already running
-        // Note: We can't check isCancelled reliably, so we'll just proceed
-
         // Get selected paths from workspace
         let selectedPaths: Set<String>
         if let data = workspace.selectionJSON.data(using: .utf8),
@@ -80,7 +79,7 @@ struct WorkspaceDetailView: View {
             selectedPaths = []
         }
 
-        // Generate empty codebase if no files selected but tree is enabled
+        // Generate empty codebase if no files selected
         if selectedPaths.isEmpty {
             if includeFileTree {
                 output = "<codebase>\n  <fileTree>\n  </fileTree>\n</codebase>\n"
@@ -88,6 +87,8 @@ struct WorkspaceDetailView: View {
                 output = "<codebase>\n</codebase>\n"
             }
             totalTokens = 0
+            previousSelectedPaths = []
+            lastGeneratedXML = output
             let duration = Date().timeIntervalSince(startTime)
             print("[Generation Complete - Empty] Time: \(String(format: "%.3fs", duration))")
             return
@@ -105,23 +106,39 @@ struct WorkspaceDetailView: View {
         }
 
         do {
-            print("[Generation Started] Selected files: \(selectedPaths.count)")
+            // Calculate what changed
+            let addedPaths = selectedPaths.subtracting(previousSelectedPaths)
+            let removedPaths = previousSelectedPaths.subtracting(selectedPaths)
 
-            let result = try await engine.generateContext(
-                rootURL: rootURL,
-                selectedPaths: selectedPaths,
+            // Always use incremental updates - even first generation is just adding all files to empty context
+            let currentXML = lastGeneratedXML.isEmpty ? "<codebase>\n</codebase>\n" : lastGeneratedXML
+
+            print("[Incremental Update] Added: \(addedPaths.count), Removed: \(removedPaths.count)")
+            if !addedPaths.isEmpty {
+                print("  - Adding paths: \(Array(addedPaths).prefix(5))\(addedPaths.count > 5 ? "..." : "")")
+            }
+            if !removedPaths.isEmpty {
+                print("  - Removing paths: \(Array(removedPaths).prefix(5))\(removedPaths.count > 5 ? "..." : "")")
+            }
+
+            let result = try await engine.updateContext(
+                currentXML: currentXML,
+                addedPaths: addedPaths,
+                removedPaths: removedPaths,
                 allFiles: allFiles,
-                includeTree: includeFileTree
+                includeTree: includeFileTree,
+                rootURL: rootURL
             )
 
             output = result.xml
             totalTokens = result.tokenCount
             selectedTokenCount = result.tokenCount
+            lastGeneratedXML = result.xml
+            previousSelectedPaths = selectedPaths
 
             let totalDuration = Date().timeIntervalSince(startTime)
-            print("[Generation Complete] Files: \(result.filesProcessed), Tokens: \(result.tokenCount)")
-            print("  - Engine processing time: \(String(format: "%.3fs", result.generationTime))")
-            print("  - Total end-to-end time: \(String(format: "%.3fs", totalDuration))")
+            print("[Incremental Update Complete] Duration: \(String(format: "%.3fs", totalDuration))")
+            print("  - Files processed: \(result.filesProcessed), Total tokens: \(result.tokenCount)")
 
             if totalDuration - result.generationTime > 0.5 {
                 print("  - Overhead time: \(String(format: "%.3fs", totalDuration - result.generationTime)) (includes file loading, UI updates)")
@@ -220,7 +237,7 @@ private struct OutputHeader: View {
                     Divider()
                         .frame(height: 14)
 
-                    Text("\(formatTokenCount(selectedTokenCount)) tokens")
+                    Text("\(AppConfiguration.formatTokenCount(selectedTokenCount)) tokens")
                         .font(.caption.monospacedDigit())
                         .foregroundStyle(.secondary)
                 }
@@ -235,28 +252,14 @@ private struct OutputHeader: View {
         .padding(.vertical, 8)
     }
 
-    private func formatTokenCount(_ count: Int) -> String {
-        if count < 1000 {
-            return "\(count)"
-        } else if count < 1_000_000 {
-            return String(format: "%.1fk", Double(count) / 1000)
-        } else {
-            return String(format: "%.1fM", Double(count) / 1_000_000)
-        }
-    }
 }
 
 private struct OutputPreview: View {
     let text: String
+
     var body: some View {
-        ScrollView {
-            Text(text)
-                .font(.system(.body, design: .monospaced))
-                .textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(12)
-        }
-        .background(.thinMaterial)
+        PerformantTextView(text: text)
+            .background(.thinMaterial)
     }
 }
 
