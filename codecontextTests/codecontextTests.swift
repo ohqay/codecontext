@@ -46,6 +46,6 @@ struct codecontextTests {
         #expect(LanguageMap.languageHint(for: URL(fileURLWithPath: "test.js")) == "javascript")
         #expect(LanguageMap.languageHint(for: URL(fileURLWithPath: "test.py")) == "python")
         #expect(LanguageMap.languageHint(for: URL(fileURLWithPath: "test.rs")) == "rust")
-        #expect(LanguageMap.languageHint(for: URL(fileURLWithPath: "test.unknown")) == "")
+        #expect(LanguageMap.languageHint(for: URL(fileURLWithPath: "test.unknown")) == "unknown")
     }
 }
