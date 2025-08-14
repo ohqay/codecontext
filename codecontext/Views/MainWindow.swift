@@ -5,6 +5,7 @@ import SwiftUI
 @Observable
 final class AppState {
     var includeFileTreeInOutput: Bool = true
+    var includeInstructionsInOutput: Bool = true
     var currentWorkspace: SDWorkspace?
     var selectedTokenCount: Int = 0
 }
@@ -40,6 +41,10 @@ struct MainWindow: View {
                     includeFileTree: Binding(
                         get: { appState.includeFileTreeInOutput },
                         set: { appState.includeFileTreeInOutput = $0 }
+                    ),
+                    includeInstructions: Binding(
+                        get: { appState.includeInstructionsInOutput },
+                        set: { appState.includeInstructionsInOutput = $0 }
                     ),
                     selectedTokenCount: Binding(
                         get: { appState.selectedTokenCount },

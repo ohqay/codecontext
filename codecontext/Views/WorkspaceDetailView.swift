@@ -5,6 +5,7 @@ import UniformTypeIdentifiers
 struct WorkspaceDetailView: View {
     let workspace: SDWorkspace
     @Binding var includeFileTree: Bool
+    @Binding var includeInstructions: Bool
     @Binding var selectedTokenCount: Int
 
     @Environment(\.modelContext) private var modelContext
@@ -55,6 +56,7 @@ struct WorkspaceDetailView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     OutputHeader(
                         includeFileTree: $includeFileTree,
+                        includeInstructions: $includeInstructions,
                         selectedFileCount: selectedFileCount,
                         selectedTokenCount: selectedTokenCount
                     )
@@ -83,6 +85,7 @@ struct WorkspaceDetailView: View {
             WorkspaceChangeHandlers(
                 workspace: workspace,
                 includeFileTree: includeFileTree,
+                includeInstructions: includeInstructions,
                 lastSelectionJSON: $lastSelectionJSON,
                 onTreeToggle: scheduleRegeneration,
                 onSelectionChange: updateSelectedFileCount
@@ -163,7 +166,7 @@ struct WorkspaceDetailView: View {
                 allFiles: allFiles,
                 includeTree: includeFileTree,
                 rootURL: rootURL,
-                userInstructions: workspace.userInstructions
+                userInstructions: includeInstructions ? workspace.userInstructions : ""
             )
 
             output = result.xml
@@ -255,12 +258,15 @@ struct WorkspaceDetailView: View {
 
 private struct OutputHeader: View {
     @Binding var includeFileTree: Bool
+    @Binding var includeInstructions: Bool
     let selectedFileCount: Int
     let selectedTokenCount: Int
 
     var body: some View {
         HStack {
             Toggle("Include file tree", isOn: $includeFileTree)
+            
+            Toggle("Include instructions", isOn: $includeInstructions)
 
             Spacer()
 
@@ -337,6 +343,7 @@ private struct OutputNotificationHandlers: ViewModifier {
 private struct WorkspaceChangeHandlers: ViewModifier {
     let workspace: SDWorkspace
     let includeFileTree: Bool
+    let includeInstructions: Bool
     @Binding var lastSelectionJSON: String
     let onTreeToggle: () -> Void
     let onSelectionChange: () -> Void
@@ -344,6 +351,9 @@ private struct WorkspaceChangeHandlers: ViewModifier {
     func body(content: Content) -> some View {
         content
             .onChange(of: includeFileTree) { _, _ in
+                onTreeToggle()
+            }
+            .onChange(of: includeInstructions) { _, _ in
                 onTreeToggle()
             }
             .onChange(of: workspace.selectionJSON) { _, newValue in
