@@ -26,7 +26,10 @@ struct UserInstructionsEditor: View {
                     .font(.system(size: 14))
                     .foregroundStyle(.tertiary)
                     .allowsHitTesting(false)
-                    .padding(8) // Match TextEditor padding exactly
+                    .padding(.leading, 12) // Slight right offset to match TextEditor text position
+                    .padding(.top, 8)
+                    .padding(.trailing, 8)
+                    .padding(.bottom, 8)
             }
         }
     }
