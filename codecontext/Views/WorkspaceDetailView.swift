@@ -45,6 +45,7 @@ struct WorkspaceDetailView: View {
                         RoundedRectangle(cornerRadius: 8)
                             .strokeBorder(.separator.opacity(0.5), lineWidth: 0.5)
                     )
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
                 }
                 .frame(maxHeight: .infinity)
                 .padding(.horizontal, 20)
@@ -65,6 +66,7 @@ struct WorkspaceDetailView: View {
                             RoundedRectangle(cornerRadius: 8)
                                 .strokeBorder(.separator.opacity(0.5), lineWidth: 0.5)
                         )
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
                 }
                 .padding(.horizontal, 20)
                 .padding(.bottom, 20)

@@ -23,10 +23,10 @@ struct UserInstructionsEditor: View {
                     .font(.system(size: 14))
                     .foregroundStyle(.tertiary)
                     .allowsHitTesting(false)
-                    .padding(.leading, 12) // Slight right offset to match text position
-                    .padding(.top, 8)
-                    .padding(.trailing, 8)
-                    .padding(.bottom, 8)
+                    .padding(.leading, 16) // Slight right offset to match text position (12px + 4px)
+                    .padding(.top, 12)
+                    .padding(.trailing, 12)
+                    .padding(.bottom, 12)
             }
         }
     }

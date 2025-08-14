@@ -23,12 +23,15 @@ struct PerformantTextView: NSViewRepresentable {
         scrollView.autohidesScrollers = true
         scrollView.scrollerStyle = .overlay
         scrollView.backgroundColor = .clear
+        scrollView.drawsBackground = false
+        scrollView.wantsLayer = true
 
         // Configure text view for optimal performance
         textView.isEditable = false
         textView.isSelectable = true
         textView.font = font
         textView.backgroundColor = .clear
+        textView.drawsBackground = false
         textView.textColor = .labelColor
         textView.isVerticallyResizable = true
         textView.isHorizontallyResizable = false
@@ -41,7 +44,7 @@ struct PerformantTextView: NSViewRepresentable {
         // Performance optimizations
         textView.layoutManager?.allowsNonContiguousLayout = true
         textView.textContainer?.lineFragmentPadding = 0
-        textView.textContainerInset = NSSize(width: 8, height: 8)
+        textView.textContainerInset = NSSize(width: 12, height: 12)
 
         // Set content
         textView.string = text
