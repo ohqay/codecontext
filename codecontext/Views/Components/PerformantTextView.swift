@@ -8,7 +8,7 @@ struct PerformantTextView: NSViewRepresentable {
     let text: String
     let font: NSFont
 
-    init(text: String, font: NSFont = .monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)) {
+    init(text: String, font: NSFont = .systemFont(ofSize: 14)) {
         self.text = text
         self.font = font
     }
@@ -20,7 +20,8 @@ struct PerformantTextView: NSViewRepresentable {
         // Configure scroll view
         scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = false
-        scrollView.autohidesScrollers = false
+        scrollView.autohidesScrollers = true
+        scrollView.scrollerStyle = .overlay
         scrollView.backgroundColor = .clear
 
         // Configure text view for optimal performance
@@ -39,7 +40,8 @@ struct PerformantTextView: NSViewRepresentable {
 
         // Performance optimizations
         textView.layoutManager?.allowsNonContiguousLayout = true
-        textView.textContainer?.lineFragmentPadding = 12
+        textView.textContainer?.lineFragmentPadding = 0
+        textView.textContainerInset = NSSize(width: 8, height: 8)
 
         // Set content
         textView.string = text

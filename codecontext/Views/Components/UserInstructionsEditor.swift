@@ -1,36 +1,30 @@
 import SwiftUI
 
-/// Native-styled text editor for user instructions
+/// Native-styled text editor for user instructions using native SwiftUI placeholder support
 struct UserInstructionsEditor: View {
     @Binding var text: String
     let placeholder: String
-    
+
     init(
-        text: Binding<String>, 
+        text: Binding<String>,
         placeholder: String = "Enter your instructions or prompt here..."
     ) {
-        self._text = text
+        _text = text
         self.placeholder = placeholder
     }
-    
+
     var body: some View {
-        ZStack(alignment: .topLeading) {
-            TextEditor(text: $text)
-                .font(.system(size: 14))
-                .scrollContentBackground(.hidden)
-                .frame(minHeight: 80)
-                .padding(8)
-            
-            // Placeholder text when empty
-            if text.isEmpty {
-                Text(placeholder)
-                    .font(.system(size: 14))
-                    .foregroundStyle(.tertiary)
-                    .allowsHitTesting(false)
-                    .padding(.top, 16)
-                    .padding(.leading, 12)
-            }
-        }
+        TextField(
+            "Instructions",
+            text: $text,
+            prompt: Text(placeholder),
+            axis: .vertical
+        )
+        .textFieldStyle(.plain)
+        .font(.system(size: 14))
+        .lineLimit(5 ... 20)
+        .scrollIndicators(.automatic)
+        .padding(8)
     }
 }
 

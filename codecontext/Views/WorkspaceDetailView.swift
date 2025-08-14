@@ -32,35 +32,42 @@ struct WorkspaceDetailView: View {
                     Text("Instructions")
                         .font(.headline)
                         .foregroundStyle(.primary)
-                    
+
                     UserInstructionsEditor(
                         text: Binding(
                             get: { workspace.userInstructions },
                             set: { workspace.userInstructions = $0 }
                         )
                     )
-                    .frame(height: 100)
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+                    .frame(minHeight: 100, maxHeight: .infinity)
+                    .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .strokeBorder(.separator.opacity(0.5), lineWidth: 0.5)
+                    )
                 }
+                .frame(maxHeight: .infinity)
                 .padding(.horizontal, 20)
                 .padding(.top, 16)
-                
-                // Context Output Section  
+
+                // Context Output Section
                 VStack(alignment: .leading, spacing: 8) {
                     OutputHeader(
                         includeFileTree: $includeFileTree,
                         selectedFileCount: selectedFileCount,
                         selectedTokenCount: selectedTokenCount
                     )
-                    
+
                     OutputPreview(text: output)
                         .frame(maxHeight: 300)
-                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+                        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8)
+                                .strokeBorder(.separator.opacity(0.5), lineWidth: 0.5)
+                        )
                 }
                 .padding(.horizontal, 20)
                 .padding(.bottom, 20)
-                
-                Spacer()
             }
         }
         .toolbar { OutputToolbar() }
@@ -278,7 +285,6 @@ private struct OutputHeader: View {
         .padding(.trailing, 10)
         .padding(.vertical, 8)
     }
-
 }
 
 private struct OutputPreview: View {
