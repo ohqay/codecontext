@@ -18,6 +18,7 @@ struct UserInstructionsEditor: View {
             TextEditor(text: $text)
                 .font(.system(size: 14))
                 .scrollContentBackground(.hidden)
+                .scrollIndicators(.automatic)
                 .padding(8)
             
             // Custom placeholder overlay
