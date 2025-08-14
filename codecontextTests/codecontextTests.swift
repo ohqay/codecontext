@@ -48,13 +48,13 @@ struct codecontextTests {
         #expect(LanguageMap.languageHint(for: URL(fileURLWithPath: "test.rs")) == "rust")
         #expect(LanguageMap.languageHint(for: URL(fileURLWithPath: "test.unknown")) == "unknown")
     }
-    
+
     @Test func userInstructionsWrapsContextCorrectly() async throws {
         let engine = await StreamingContextEngine()
         let testXML = "<codebase>\n  <file=test.swift>\n  Path: test.swift\n  `````swift\n  print(\"Hello\")\n  `````\n  </file=test.swift>\n</codebase>\n"
         let instructions = "Please analyze this code for bugs and suggest improvements."
         let rootURL = URL(fileURLWithPath: "/tmp")
-        
+
         let result = try await engine.updateContext(
             currentXML: testXML,
             addedPaths: [],
@@ -64,23 +64,23 @@ struct codecontextTests {
             rootURL: rootURL,
             userInstructions: instructions
         )
-        
+
         // Should contain instructions at both top and bottom
         #expect(result.xml.hasPrefix("<userInstructions>\n\(instructions)\n</userInstructions>\n\n"))
         #expect(result.xml.hasSuffix("\n<userInstructions>\n\(instructions)\n</userInstructions>\n"))
-        
+
         // Should contain the original context in the middle
         #expect(result.xml.contains(testXML))
-        
+
         // Token count should include instructions
         #expect(result.tokenCount > 0)
     }
-    
+
     @Test func emptyUserInstructionsDoesNotWrapContext() async throws {
         let engine = await StreamingContextEngine()
         let testXML = "<codebase>\n  <file=test.swift>\n  Path: test.swift\n  `````swift\n  print(\"Hello\")\n  `````\n  </file=test.swift>\n</codebase>\n"
         let rootURL = URL(fileURLWithPath: "/tmp")
-        
+
         let result = try await engine.updateContext(
             currentXML: testXML,
             addedPaths: [],
@@ -90,17 +90,17 @@ struct codecontextTests {
             rootURL: rootURL,
             userInstructions: ""
         )
-        
+
         // Should not contain userInstructions tags when empty
         #expect(!result.xml.contains("<userInstructions>"))
         #expect(result.xml == testXML)
     }
-    
+
     @Test func whitespaceOnlyInstructionsDoesNotWrapContext() async throws {
         let engine = await StreamingContextEngine()
         let testXML = "<codebase>\n</codebase>\n"
         let rootURL = URL(fileURLWithPath: "/tmp")
-        
+
         let result = try await engine.updateContext(
             currentXML: testXML,
             addedPaths: [],
@@ -110,7 +110,7 @@ struct codecontextTests {
             rootURL: rootURL,
             userInstructions: "   \n\t  "
         )
-        
+
         // Should not wrap context when instructions are only whitespace
         #expect(!result.xml.contains("<userInstructions>"))
         #expect(result.xml == testXML)

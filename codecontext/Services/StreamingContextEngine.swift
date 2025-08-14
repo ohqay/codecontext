@@ -81,7 +81,7 @@ actor StreamingContextEngine {
         for pathToRemove in removedPaths {
             let xmlBeforeRemoval = updatedXML
             updatedXML = removeFileFromXML(updatedXML, path: pathToRemove, rootURL: rootURL)
-            
+
             // Validate removal was successful
             if xmlBeforeRemoval == updatedXML {
                 logDebug("WARNING: File removal had no effect", details: "Path: \(pathToRemove)")
@@ -131,7 +131,7 @@ actor StreamingContextEngine {
         if !userInstructions.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             updatedXML = wrapWithUserInstructions(updatedXML, instructions: userInstructions)
         }
-        
+
         // Calculate token count for final XML
         updatedTokenCount = await TokenizerService.shared.countTokens(updatedXML)
 
@@ -154,7 +154,7 @@ actor StreamingContextEngine {
     }
 
     // Helper method to remove a file section from XML
-    internal func removeFileFromXML(_ xml: String, path: String, rootURL: URL) -> String {
+    func removeFileFromXML(_ xml: String, path: String, rootURL: URL) -> String {
         // Convert absolute path to relative path using the same logic as when adding files
         let relativePath: String
         if path.hasPrefix("/") {
@@ -164,10 +164,10 @@ actor StreamingContextEngine {
             // Already a relative path
             relativePath = path
         }
-        
+
         // Escape special regex characters in the path
         let escapedPath = NSRegularExpression.escapedPattern(for: relativePath)
-        
+
         // Find and remove the file section by matching the Path: line
         // Pattern: <file=filename>...Path: relativePath...content...</file=filename>
         // Note: The closing tag includes the filename, so we need to capture and match it
@@ -177,7 +177,7 @@ actor StreamingContextEngine {
             let regex = try NSRegularExpression(pattern: pattern, options: .dotMatchesLineSeparators)
             let range = NSRange(location: 0, length: xml.utf16.count)
             let result = regex.stringByReplacingMatches(in: xml, options: [], range: range, withTemplate: "")
-            
+
             // Enhanced logging to help debug path conversion issues
             if result != xml {
                 logDebug("File removed from XML", details: "Absolute: \(path) → Relative: \(relativePath)")
@@ -191,23 +191,23 @@ actor StreamingContextEngine {
                 if let pathLocation = xml.range(of: "Path: \(relativePath)") {
                     let start = xml.index(pathLocation.lowerBound, offsetBy: -50, limitedBy: xml.startIndex) ?? xml.startIndex
                     let end = xml.index(pathLocation.upperBound, offsetBy: 100, limitedBy: xml.endIndex) ?? xml.endIndex
-                    let snippet = String(xml[start..<end])
+                    let snippet = String(xml[start ..< end])
                     logDebug("XML snippet around target", details: snippet.replacingOccurrences(of: "\n", with: "\\n"))
                 }
             }
-            
+
             return result
         } catch {
             logDebug("File removal failed - regex error", details: "Path: \(relativePath), Error: \(error)")
             return xml
         }
     }
-    
+
     // Helper method to extract all paths from XML for debugging
     private func extractAllPathsFromXML(_ xml: String) -> [String] {
         let lines = xml.components(separatedBy: .newlines)
         var paths: [String] = []
-        
+
         for line in lines {
             if line.contains("Path: ") {
                 let pathLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -215,15 +215,15 @@ actor StreamingContextEngine {
                 paths.append(path)
             }
         }
-        
+
         return paths
     }
-    
+
     // Centralized method to convert absolute path to relative path
     // This MUST match the logic used when adding files to ensure consistency
     private func convertToRelativePath(_ absolutePath: String, rootURL: URL) -> String {
         let rootPath = rootURL.path
-        
+
         // Use the same logic as when adding files to XML
         if absolutePath.hasPrefix(rootPath + "/") {
             return absolutePath.replacingOccurrences(of: rootPath + "/", with: "")
@@ -238,7 +238,7 @@ actor StreamingContextEngine {
     }
 
     // Helper method to insert new files into XML
-    internal func insertFilesIntoXML(_ xml: String, newFilesXML: String) -> String {
+    func insertFilesIntoXML(_ xml: String, newFilesXML: String) -> String {
         // Insert before </codebase> closing tag
         if let range = xml.range(of: "</codebase>") {
             var result = xml
@@ -277,7 +277,7 @@ actor StreamingContextEngine {
         // Use all files from the workspace to show complete codebase structure
         // This provides LLMs with better context about available files
         let allPaths = allFiles.map { $0.url.path }
-        
+
         // Filter out build artifacts before generating tree
         let filteredPaths = filterBuildArtifacts(allPaths)
 
@@ -643,7 +643,7 @@ actor StreamingContextEngine {
         }
     }
 
-    internal func extractSelectedPaths(from xml: String) -> Set<String> {
+    func extractSelectedPaths(from xml: String) -> Set<String> {
         // Simple extraction of paths from existing XML
         var paths = Set<String>()
         let lines = xml.split(separator: "\n")

@@ -283,8 +283,7 @@ private struct OutputHeader: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .padding(.leading, 20)
-        .padding(.trailing, 10)
+        .padding(.horizontal, 20)
         .padding(.vertical, 8)
     }
 }

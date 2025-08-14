@@ -222,12 +222,12 @@ final class FileTreeModel {
 
         // Cancel any existing selection task to prevent conflicts
         selectionTask?.cancel()
-        
+
         // Handle selection asynchronously
         selectionTask = Task {
             // Check for cancellation before heavy work
             if Task.isCancelled { return }
-            
+
             // Update selection state off main thread
             let update = await selectionManager.toggleSelection(
                 for: nodePath,
@@ -247,7 +247,7 @@ final class FileTreeModel {
             if !affectedFiles.isEmpty {
                 // Check for cancellation before expensive token calculation
                 if Task.isCancelled { return }
-                
+
                 let (_, selectedFiles, _) = await selectionManager.getSelectionState()
                 await selectionManager.updateTokenCounts(
                     for: selectedFiles,
@@ -273,7 +273,7 @@ final class FileTreeModel {
 
         func collect(_ n: FileNode) {
             nodeCount += 1
-            
+
             // Add to paths (all nodes)
             paths.insert(n.url.path)
 
@@ -289,12 +289,12 @@ final class FileTreeModel {
         }
 
         collect(node)
-        
+
         // Log performance info for large operations
         if nodeCount > 1000 {
             print("[FileNode] Large folder selection: \(nodeCount) nodes, \(files.count) files")
         }
-        
+
         return (paths, files)
     }
 
