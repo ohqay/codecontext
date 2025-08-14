@@ -8,7 +8,7 @@ struct PerformantTextView: NSViewRepresentable {
     let text: String
     let font: NSFont
 
-    init(text: String, font: NSFont = .systemFont(ofSize: 14)) {
+    init(text: String, font: NSFont = .monospacedSystemFont(ofSize: 14, weight: .regular)) {
         self.text = text
         self.font = font
     }
