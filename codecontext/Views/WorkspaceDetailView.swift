@@ -62,7 +62,7 @@ struct WorkspaceDetailView: View {
                     )
 
                     OutputPreview(text: output)
-                        .frame(maxHeight: 300)
+                        .frame(maxHeight: .infinity)
                         .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8))
                         .overlay(
                             RoundedRectangle(cornerRadius: 8)
@@ -70,6 +70,7 @@ struct WorkspaceDetailView: View {
                         )
                         .clipShape(RoundedRectangle(cornerRadius: 8))
                 }
+                .frame(maxHeight: .infinity)
                 .padding(.horizontal, 20)
                 .padding(.bottom, 20)
             }
@@ -354,6 +355,9 @@ private struct WorkspaceChangeHandlers: ViewModifier {
                 onTreeToggle()
             }
             .onChange(of: includeInstructions) { _, _ in
+                onTreeToggle()
+            }
+            .onChange(of: workspace.userInstructions) { _, _ in
                 onTreeToggle()
             }
             .onChange(of: workspace.selectionJSON) { _, newValue in

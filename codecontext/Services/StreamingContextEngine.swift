@@ -127,7 +127,9 @@ actor StreamingContextEngine {
             updatedXML = updateFileTreeInXML(updatedXML, newTree: treeXML)
         }
 
-        // Wrap with user instructions if provided
+        // Always clean existing user instructions first, then wrap with new ones if provided
+        updatedXML = stripExistingUserInstructions(updatedXML)
+        
         if !userInstructions.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             updatedXML = wrapWithUserInstructions(updatedXML, instructions: userInstructions)
         }
@@ -144,6 +146,22 @@ actor StreamingContextEngine {
             filesProcessed: addedPaths.count,
             generationTime: duration
         )
+    }
+
+    // Helper method to strip existing user instructions from XML
+    private func stripExistingUserInstructions(_ xml: String) -> String {
+        // Pattern to match userInstructions at the beginning and end of XML
+        let pattern = "^<userInstructions>.*?</userInstructions>\\s*\\n*|\\n*\\s*<userInstructions>.*?</userInstructions>\\s*$"
+        
+        do {
+            let regex = try NSRegularExpression(pattern: pattern, options: [.dotMatchesLineSeparators])
+            let range = NSRange(location: 0, length: xml.utf16.count)
+            let result = regex.stringByReplacingMatches(in: xml, options: [], range: range, withTemplate: "")
+            return result.trimmingCharacters(in: .whitespacesAndNewlines)
+        } catch {
+            logDebug("Failed to strip user instructions", details: "Error: \(error)")
+            return xml
+        }
     }
 
     // Helper method to wrap context XML with user instructions at top and bottom
