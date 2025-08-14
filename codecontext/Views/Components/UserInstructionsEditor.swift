@@ -15,11 +15,7 @@ struct UserInstructionsEditor: View {
 
     var body: some View {
         ZStack(alignment: .topLeading) {
-            TextEditor(text: $text)
-                .font(.system(size: 14))
-                .scrollContentBackground(.hidden)
-                .scrollIndicators(.automatic)
-                .padding(8)
+            EditableTextView(text: $text)
             
             // Custom placeholder overlay
             if text.isEmpty {
@@ -27,7 +23,7 @@ struct UserInstructionsEditor: View {
                     .font(.system(size: 14))
                     .foregroundStyle(.tertiary)
                     .allowsHitTesting(false)
-                    .padding(.leading, 12) // Slight right offset to match TextEditor text position
+                    .padding(.leading, 12) // Slight right offset to match text position
                     .padding(.top, 8)
                     .padding(.trailing, 8)
                     .padding(.bottom, 8)
