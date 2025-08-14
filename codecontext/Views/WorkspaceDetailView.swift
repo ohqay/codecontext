@@ -118,18 +118,42 @@ struct WorkspaceDetailView: View {
             selectedPaths = []
         }
 
-        // Generate empty codebase if no files selected
+        // Generate codebase with file tree even if no files selected
         if selectedPaths.isEmpty {
-            if includeFileTree {
-                output = "<codebase>\n  <fileTree>\n  </fileTree>\n</codebase>\n"
-            } else {
-                output = "<codebase>\n</codebase>\n"
+            guard let rootURL = resolveURL(from: workspace) else {
+                print("[Generation Failed] Could not resolve workspace URL")
+                return
             }
-            totalTokens = 0
-            previousSelectedPaths = []
-            lastGeneratedXML = output
-            let duration = Date().timeIntervalSince(startTime)
-            print("[Generation Complete - Empty] Time: \(String(format: "%.3fs", duration))")
+
+            guard let engine = streamingEngine else {
+                print("[Generation Failed] Streaming engine not initialized")
+                return
+            }
+
+            do {
+                let result = try await engine.updateContext(
+                    currentXML: "<codebase>\n</codebase>\n",
+                    addedPaths: [],
+                    removedPaths: [],
+                    allFiles: allFiles,
+                    includeTree: includeFileTree,
+                    rootURL: rootURL,
+                    userInstructions: includeInstructions ? workspace.userInstructions : ""
+                )
+
+                output = result.xml
+                totalTokens = result.tokenCount
+                selectedTokenCount = result.tokenCount
+                lastGeneratedXML = result.xml
+                previousSelectedPaths = []
+
+                let duration = Date().timeIntervalSince(startTime)
+                print("[Generation Complete - Empty with Tree] Time: \(String(format: "%.3fs", duration))")
+            } catch {
+                let duration = Date().timeIntervalSince(startTime)
+                print("[Generation Failed] Error after \(String(format: "%.3fs", duration)): \(error)")
+                output = "Error generating context: \(error.localizedDescription)"
+            }
             return
         }
 
