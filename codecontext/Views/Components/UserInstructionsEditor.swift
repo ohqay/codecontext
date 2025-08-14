@@ -14,17 +14,21 @@ struct UserInstructionsEditor: View {
     }
 
     var body: some View {
-        TextField(
-            "Instructions",
-            text: $text,
-            prompt: Text(placeholder),
-            axis: .vertical
-        )
-        .textFieldStyle(.plain)
-        .font(.system(size: 14))
-        .lineLimit(5 ... 20)
-        .scrollIndicators(.automatic)
-        .padding(8)
+        ZStack(alignment: .topLeading) {
+            TextEditor(text: $text)
+                .font(.system(size: 14))
+                .scrollContentBackground(.hidden)
+                .padding(8)
+            
+            // Custom placeholder overlay
+            if text.isEmpty {
+                Text(placeholder)
+                    .font(.system(size: 14))
+                    .foregroundStyle(.tertiary)
+                    .allowsHitTesting(false)
+                    .padding(8) // Match TextEditor padding exactly
+            }
+        }
     }
 }
 
