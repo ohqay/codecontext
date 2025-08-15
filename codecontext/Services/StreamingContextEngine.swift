@@ -157,7 +157,7 @@ actor StreamingContextEngine {
             let regex = try NSRegularExpression(pattern: pattern, options: [.dotMatchesLineSeparators])
             let range = NSRange(location: 0, length: xml.utf16.count)
             let result = regex.stringByReplacingMatches(in: xml, options: [], range: range, withTemplate: "")
-            return result.trimmingCharacters(in: .whitespacesAndNewlines)
+            return result
         } catch {
             logDebug("Failed to strip user instructions", details: "Error: \(error)")
             return xml
