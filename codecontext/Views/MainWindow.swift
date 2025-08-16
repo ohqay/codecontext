@@ -62,7 +62,7 @@ struct MainWindow: View {
                 newTab: createNewTab,
                 openFolder: openFolder,
                 copyOutput: copyOutput,
-                toggleFileTree: { appState.includeFileTreeInOutput.toggle() },
+                toggleFileTree: toggleFileTree,
                 refresh: triggerRefresh,
                 focusFilter: { filterFocused = true },
                 toggleSidebar: toggleSidebar
@@ -70,6 +70,7 @@ struct MainWindow: View {
         )
         .toolbar(removing: .title)
         .toolbar {
+            ToolbarSpacer(.flexible)
             ToolbarItem(placement: .navigation) {
                 GlassButton(
                     systemImage: "sidebar.left",
@@ -79,7 +80,9 @@ struct MainWindow: View {
                 .help(columnVisibility == .detailOnly ? "Show Sidebar" : "Hide Sidebar")
             }
             
-            ToolbarItem(placement: .confirmationAction) {
+            ToolbarSpacer(.fixed)
+            
+            ToolbarItem {
                 GlassButton(
                     systemImage: "doc.on.doc",
                     action: copyOutput
@@ -107,8 +110,33 @@ struct MainWindow: View {
 
     private func ensureDefaultPreference() {
         let fetch = FetchDescriptor<SDPreference>()
-        if (try? modelContext.fetch(fetch))?.isEmpty ?? true {
+        let preferences = (try? modelContext.fetch(fetch)) ?? []
+        
+        if preferences.isEmpty {
             modelContext.insert(SDPreference())
+        }
+        
+        // Load preference values into AppState
+        loadPreferencesIntoAppState()
+    }
+    
+    private func loadPreferencesIntoAppState() {
+        let fetch = FetchDescriptor<SDPreference>()
+        if let preference = try? modelContext.fetch(fetch).first {
+            appState.includeFileTreeInOutput = preference.includeFileTreeInOutput
+            appState.includeInstructionsInOutput = true // Keep existing behavior for instructions
+        }
+    }
+    
+    private func toggleFileTree() {
+        // Toggle the AppState value
+        appState.includeFileTreeInOutput.toggle()
+        
+        // Persist to database
+        let fetch = FetchDescriptor<SDPreference>()
+        if let preference = try? modelContext.fetch(fetch).first {
+            preference.includeFileTreeInOutput = appState.includeFileTreeInOutput
+            try? modelContext.save()
         }
     }
 

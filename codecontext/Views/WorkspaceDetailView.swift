@@ -1,4 +1,5 @@
 import AppKit
+import SwiftData
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -51,7 +52,6 @@ struct WorkspaceDetailView: View {
                     }
                 }
             }
-            // .backgroundExtensionEffect()
         }
         .apply(
             OutputNotificationHandlers(
@@ -65,7 +65,10 @@ struct WorkspaceDetailView: View {
                 includeFileTree: includeFileTree,
                 includeInstructions: includeInstructions,
                 lastSelectionJSON: $lastSelectionJSON,
-                onTreeToggle: scheduleRegeneration,
+                onTreeToggle: {
+                    scheduleRegeneration()
+                    persistFileTreePreference()
+                },
                 onSelectionChange: updateSelectedFileCount
             )
         )
@@ -193,6 +196,14 @@ struct WorkspaceDetailView: View {
         }
     }
 
+    private func persistFileTreePreference() {
+        let fetch = FetchDescriptor<SDPreference>()
+        if let preference = try? modelContext.fetch(fetch).first {
+            preference.includeFileTreeInOutput = includeFileTree
+            try? modelContext.save()
+        }
+    }
+    
     private func updateSelectedFileCount() {
         if let data = workspace.selectionJSON.data(using: .utf8),
            let paths = try? JSONDecoder().decode(Set<String>.self, from: data)
@@ -303,10 +314,6 @@ private struct OutputPreview: View {
         PerformantTextView(text: text)
     }
 }
-
-// MARK: - Toolbar
-
-// Note: Toolbar moved to MainWindow to resolve NavigationSplitView toolbar conflicts
 
 // MARK: - View Modifiers
 
