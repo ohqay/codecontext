@@ -29,11 +29,7 @@ struct WorkspaceDetailView: View {
 
             VStack(spacing: 20) {
                 // User Instructions Section
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Instructions")
-                        .font(.headline)
-                        .foregroundStyle(.primary)
-
+                DetailSection(topSectionTitle: "Instructions") {
                     UserInstructionsEditor(
                         text: Binding(
                             get: { workspace.userInstructions },
@@ -41,38 +37,24 @@ struct WorkspaceDetailView: View {
                         )
                     )
                     .frame(minHeight: 100, maxHeight: .infinity)
-                    .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .strokeBorder(.separator.opacity(0.5), lineWidth: 0.5)
-                    )
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .styledCard(material: .regularMaterial)
                 }
-                .frame(maxHeight: .infinity)
-                .padding(.horizontal, 20)
-                .padding(.top, 16)
 
                 // Context Output Section
-                VStack(alignment: .leading, spacing: 8) {
-                    OutputHeader(
-                        includeFileTree: $includeFileTree,
-                        includeInstructions: $includeInstructions,
-                        selectedFileCount: selectedFileCount,
-                        selectedTokenCount: selectedTokenCount
-                    )
-
-                    OutputPreview(text: output)
-                        .frame(maxHeight: .infinity)
-                        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8)
-                                .strokeBorder(.separator.opacity(0.5), lineWidth: 0.5)
+                DetailSection(bottomSectionTitle: nil) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        OutputHeader(
+                            includeFileTree: $includeFileTree,
+                            includeInstructions: $includeInstructions,
+                            selectedFileCount: selectedFileCount,
+                            selectedTokenCount: selectedTokenCount
                         )
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
+
+                        OutputPreview(text: output)
+                            .frame(maxHeight: .infinity)
+                            .styledCard(material: .regularMaterial)
+                    }
                 }
-                .frame(maxHeight: .infinity)
-                .padding(.horizontal, 20)
-                .padding(.bottom, 20)
             }
         }
         .toolbar { OutputToolbar() }
@@ -131,6 +113,7 @@ struct WorkspaceDetailView: View {
             }
 
             do {
+                print("[DEBUG] File tree generation - allFiles.count: \(allFiles.count), includeFileTree: \(includeFileTree)")
                 let result = try await engine.updateContext(
                     currentXML: "<codebase>\n</codebase>\n",
                     addedPaths: [],
@@ -177,6 +160,7 @@ struct WorkspaceDetailView: View {
             let currentXML = lastGeneratedXML.isEmpty ? "<codebase>\n</codebase>\n" : lastGeneratedXML
 
             print("[Incremental Update] Added: \(addedPaths.count), Removed: \(removedPaths.count)")
+            print("[DEBUG] File tree generation with files - allFiles.count: \(allFiles.count), includeFileTree: \(includeFileTree)")
             if !addedPaths.isEmpty {
                 print("  - Adding paths: \(Array(addedPaths).prefix(5))\(addedPaths.count > 5 ? "..." : "")")
             }
@@ -290,7 +274,7 @@ private struct OutputHeader: View {
     var body: some View {
         HStack {
             Toggle("Include file tree", isOn: $includeFileTree)
-            
+
             Toggle("Include instructions", isOn: $includeInstructions)
 
             Spacer()
