@@ -78,6 +78,14 @@ struct MainWindow: View {
                 .symbolVariant(columnVisibility == .detailOnly ? .none : .fill)
                 .help(columnVisibility == .detailOnly ? "Show Sidebar" : "Hide Sidebar")
             }
+            
+            ToolbarItem(placement: .confirmationAction) {
+                GlassButton(
+                    systemImage: "doc.on.doc",
+                    action: copyOutput
+                )
+                .help("Copy Context")
+            }
         }
         .onAppear {
             ensureDefaultPreference()
@@ -158,7 +166,6 @@ struct MainWindow: View {
     private func triggerRefresh() {
         NotificationCenter.default.post(name: .requestRefresh, object: nil)
     }
-
 }
 
 private struct EmptySelectionView: View {

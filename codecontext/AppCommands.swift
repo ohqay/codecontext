@@ -9,7 +9,7 @@ struct AppCommands: Commands {
                 .keyboardShortcut("\\")
             Divider()
         }
-        
+
         CommandGroup(replacing: .newItem) {
             Button("New Tab", systemImage: "plus.rectangle.on.rectangle") { actions?.newTab() }
                 .keyboardShortcut("t")
@@ -18,7 +18,7 @@ struct AppCommands: Commands {
         }
 
         CommandMenu("Codebase") {
-            Button("Copy XML Output", systemImage: "doc.on.clipboard") { actions?.copyOutput() }
+            Button("Copy Context", systemImage: "doc.on.clipboard") { actions?.copyOutput() }
                 .keyboardShortcut("c", modifiers: [.command, .shift])
             Button("Toggle File Tree in Output", systemImage: "list.bullet.indent") { actions?.toggleFileTree() }
                 .keyboardShortcut("b")
@@ -28,7 +28,6 @@ struct AppCommands: Commands {
             Button("Filter Files", systemImage: "line.3.horizontal.decrease.circle") { actions?.focusFilter() }
                 .keyboardShortcut("f")
         }
-
     }
 }
 

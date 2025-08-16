@@ -275,7 +275,7 @@ actor StreamingContextEngine {
     // Helper method to update file tree in XML
     private func updateFileTreeInXML(_ xml: String, newTree: String) -> String {
         logDebug("updateFileTreeInXML", details: "Input XML length: \(xml.count), newTree length: \(newTree.count)")
-        
+
         // Replace existing <fileTree>...</fileTree> section
         let pattern = "  <fileTree>.*?</fileTree>\n"
 

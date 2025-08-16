@@ -22,11 +22,6 @@ struct WorkspaceDetailView: View {
 
     var body: some View {
         ZStack {
-            // Background layer with extension effect
-            Color.clear
-                .background(.thinMaterial)
-                .backgroundExtensionEffect()
-
             VStack(spacing: 20) {
                 // User Instructions Section
                 DetailSection(topSectionTitle: "Instructions") {
@@ -56,8 +51,8 @@ struct WorkspaceDetailView: View {
                     }
                 }
             }
+            // .backgroundExtensionEffect()
         }
-        .toolbar { OutputToolbar() }
         .apply(
             OutputNotificationHandlers(
                 output: output,
@@ -274,7 +269,6 @@ private struct OutputHeader: View {
     var body: some View {
         HStack {
             Toggle("Include file tree", isOn: $includeFileTree)
-
             Toggle("Include instructions", isOn: $includeInstructions)
 
             Spacer()
@@ -312,21 +306,7 @@ private struct OutputPreview: View {
 
 // MARK: - Toolbar
 
-private struct OutputToolbar: ToolbarContent {
-    var body: some ToolbarContent {
-        ToolbarItem(placement: .primaryAction) {
-            GlassButton(
-                systemImage: "doc.on.doc",
-                action: copyOutput
-            )
-            .help("Copy XML Output")
-        }
-    }
-
-    private func copyOutput() {
-        NotificationCenter.default.post(name: .requestCopyOutput, object: nil)
-    }
-}
+// Note: Toolbar moved to MainWindow to resolve NavigationSplitView toolbar conflicts
 
 // MARK: - View Modifiers
 
