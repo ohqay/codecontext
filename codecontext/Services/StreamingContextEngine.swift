@@ -120,16 +120,22 @@ actor StreamingContextEngine {
 
         // Update file tree if needed
         if includeTree {
+            logDebug("Generating file tree", details: "allFiles.count: \(allFiles.count)")
+            let xmlBeforeTree = updatedXML
             let treeXML = generateFileTreeXML(
                 allFiles: allFiles,
                 rootURL: rootURL
             )
+            logDebug("Generated tree XML", details: "Length: \(treeXML.count), Content preview: \(treeXML.prefix(200))")
             updatedXML = updateFileTreeInXML(updatedXML, newTree: treeXML)
+            logDebug("After tree insertion", details: "XML changed: \(xmlBeforeTree != updatedXML), New length: \(updatedXML.count)")
+        } else {
+            logDebug("Skipping file tree generation", details: "includeTree is false")
         }
 
         // Always clean existing user instructions first, then wrap with new ones if provided
         updatedXML = stripExistingUserInstructions(updatedXML)
-        
+
         if !userInstructions.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             updatedXML = wrapWithUserInstructions(updatedXML, instructions: userInstructions)
         }
@@ -152,7 +158,7 @@ actor StreamingContextEngine {
     private func stripExistingUserInstructions(_ xml: String) -> String {
         // Pattern to match userInstructions at the beginning and end of XML
         let pattern = "^<userInstructions>.*?</userInstructions>\\s*\\n*|\\n*\\s*<userInstructions>.*?</userInstructions>\\s*$"
-        
+
         do {
             let regex = try NSRegularExpression(pattern: pattern, options: [.dotMatchesLineSeparators])
             let range = NSRange(location: 0, length: xml.utf16.count)
@@ -268,12 +274,18 @@ actor StreamingContextEngine {
 
     // Helper method to update file tree in XML
     private func updateFileTreeInXML(_ xml: String, newTree: String) -> String {
+        logDebug("updateFileTreeInXML", details: "Input XML length: \(xml.count), newTree length: \(newTree.count)")
+        
         // Replace existing <fileTree>...</fileTree> section
         let pattern = "  <fileTree>.*?</fileTree>\n"
 
         if let regex = try? NSRegularExpression(pattern: pattern, options: .dotMatchesLineSeparators) {
             let range = NSRange(location: 0, length: xml.utf16.count)
-            return regex.stringByReplacingMatches(in: xml, options: [], range: range, withTemplate: newTree)
+            let result = regex.stringByReplacingMatches(in: xml, options: [], range: range, withTemplate: newTree)
+            logDebug("Used regex replacement", details: "Result length: \(result.count)")
+            return result
+        } else {
+            logDebug("Regex creation failed", details: "Pattern: \(pattern)")
         }
 
         // If no existing tree, insert after <codebase> opening
@@ -281,9 +293,13 @@ actor StreamingContextEngine {
             var result = xml
             let insertPoint = result.index(range.upperBound, offsetBy: 0)
             result.insert(contentsOf: newTree, at: insertPoint)
+            logDebug("Used insertion after <codebase>", details: "Result length: \(result.count)")
             return result
+        } else {
+            logDebug("Could not find <codebase>\\n in XML", details: "XML preview: \(xml.prefix(100))")
         }
 
+        logDebug("No insertion method worked", details: "Returning original XML")
         return xml
     }
 
@@ -295,9 +311,11 @@ actor StreamingContextEngine {
         // Use all files from the workspace to show complete codebase structure
         // This provides LLMs with better context about available files
         let allPaths = allFiles.map { $0.url.path }
+        logDebug("File tree generation", details: "allPaths.count: \(allPaths.count), rootURL: \(rootURL.path)")
 
         // Filter out build artifacts before generating tree
         let filteredPaths = filterBuildArtifacts(allPaths)
+        logDebug("After filtering artifacts", details: "filteredPaths.count: \(filteredPaths.count)")
 
         // Reuse existing tree generation logic with simple indentation
         let urls = filteredPaths.map { URL(fileURLWithPath: $0) }
@@ -308,6 +326,7 @@ actor StreamingContextEngine {
             }
             return nil
         }
+        logDebug("After converting to relative paths", details: "relative.count: \(relative.count), sample paths: \(relative.prefix(5))")
 
         let components = relative.map { $0.split(separator: "/").map(String.init) }
         var tree: [String] = []
@@ -337,6 +356,7 @@ actor StreamingContextEngine {
         }
         treeXML.append("  </fileTree>\n")
 
+        logDebug("Final file tree", details: "tree.count: \(tree.count), treeXML.count: \(treeXML.count)")
         return treeXML
     }
 
