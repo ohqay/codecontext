@@ -16,14 +16,14 @@ struct UserInstructionsEditor: View {
     var body: some View {
         ZStack(alignment: .topLeading) {
             EditableTextView(text: $text)
-            
-            // Custom placeholder overlay
+
+            // Custom placeholder text overlay
             if text.isEmpty {
                 Text(placeholder)
                     .font(.system(size: 14))
                     .foregroundStyle(.tertiary)
                     .allowsHitTesting(false)
-                    .padding(.leading, 16) // Slight right offset to match text position (12px + 4px)
+                    .padding(.leading, 12) // Slight right offset to match text position (12px + 4px)
                     .padding(.top, 12)
                     .padding(.trailing, 12)
                     .padding(.bottom, 12)
