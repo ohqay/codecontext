@@ -8,6 +8,7 @@ struct SidebarView: View {
     @Binding var selection: SDWorkspace?
     @Binding var filterFocused: Bool
     @Binding var selectedTokenCount: Int
+    @Binding var columnVisibility: NavigationSplitViewVisibility
 
     @State private var searchText: String = ""
     @State private var showWorkspaceList = false
@@ -44,7 +45,7 @@ struct SidebarView: View {
                 }
             }
         }
-        .toolbar { SidebarToolbar(selection: $selection) }
+        .toolbar { SidebarToolbar(selection: $selection, columnVisibility: $columnVisibility) }
     }
 }
 
@@ -53,44 +54,47 @@ struct SidebarView: View {
 private struct SidebarToolbar: ToolbarContent {
     @Environment(\.modelContext) private var modelContext
     @Binding var selection: SDWorkspace?
+    @Binding var columnVisibility: NavigationSplitViewVisibility
     @State private var showFiltersPopover = false
 
     var body: some ToolbarContent {
-        ToolbarItem(placement: .automatic) {
-            GlassButton(
-                systemImage: "line.3.horizontal.decrease.circle",
-                action: { showFiltersPopover.toggle() }
-            )
-            .help("Filters")
-            .popover(isPresented: $showFiltersPopover, arrowEdge: .bottom) {
-                VStack(alignment: .leading, spacing: 4) {
-                    FiltersMenu()
+        if columnVisibility != .detailOnly {
+            ToolbarItem(placement: .automatic) {
+                GlassButton(
+                    systemImage: "line.3.horizontal.decrease.circle",
+                    action: { showFiltersPopover.toggle() }
+                )
+                .help("Filters")
+                .popover(isPresented: $showFiltersPopover, arrowEdge: .bottom) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        FiltersMenu()
+                    }
+                    .padding()
+                    .frame(width: 250)
                 }
-                .padding()
-                .frame(width: 250)
             }
-        }
-        ToolbarItem(placement: .automatic) {
-            GlassButton(
-                systemImage: "arrow.clockwise",
-                action: { NotificationCenter.default.post(name: .requestRefresh, object: nil) }
-            )
-            .help("Refresh (⌘R)")
-        }
-        ToolbarItem(placement: .automatic) {
-            GlassButton(
-                systemImage: "folder.badge.plus"
-            ) {
-                if let workspace = FolderPicker.openFolder(modelContext: modelContext) {
-                    // Force SwiftData to refresh
-                    try? modelContext.save()
-                    // Small delay to ensure SwiftData updates
-                    DispatchQueue.main.async {
-                        selection = workspace
+            ToolbarItem(placement: .automatic) {
+                GlassButton(
+                    systemImage: "arrow.clockwise",
+                    action: { NotificationCenter.default.post(name: .requestRefresh, object: nil) }
+                )
+                .help("Refresh (⌘R)")
+            }
+            ToolbarItem(placement: .automatic) {
+                GlassButton(
+                    systemImage: "folder.badge.plus"
+                ) {
+                    if let workspace = FolderPicker.openFolder(modelContext: modelContext) {
+                        // Force SwiftData to refresh
+                        try? modelContext.save()
+                        // Small delay to ensure SwiftData updates
+                        DispatchQueue.main.async {
+                            selection = workspace
+                        }
                     }
                 }
+                .help("Open Folder (⌘O)")
             }
-            .help("Open Folder (⌘O)")
         }
     }
 }

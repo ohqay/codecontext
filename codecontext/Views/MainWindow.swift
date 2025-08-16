@@ -29,7 +29,8 @@ struct MainWindow: View {
                 selectedTokenCount: Binding(
                     get: { appState.selectedTokenCount },
                     set: { appState.selectedTokenCount = $0 }
-                )
+                ),
+                columnVisibility: $columnVisibility
             )
             .navigationSplitViewColumnWidth(min: 280, ideal: 400, max: 600)
             .navigationSplitViewStyle(.balanced)
@@ -64,7 +65,7 @@ struct MainWindow: View {
                 toggleFileTree: { appState.includeFileTreeInOutput.toggle() },
                 refresh: triggerRefresh,
                 focusFilter: { filterFocused = true },
-                toggleSidebar: toggleSidebar,
+                toggleSidebar: toggleSidebar
             )
         )
         .toolbar(removing: .title)
@@ -128,6 +129,10 @@ struct MainWindow: View {
         }
     }
 
+    private func toggleSidebar() {
+        columnVisibility = columnVisibility == .detailOnly ? .all : .detailOnly
+    }
+
     private func createNewTab() {
         // Use native macOS tab creation
         if let window = NSApp.keyWindow {
@@ -154,11 +159,6 @@ struct MainWindow: View {
         NotificationCenter.default.post(name: .requestRefresh, object: nil)
     }
 
-    private func toggleSidebar() {
-        withAnimation(.easeInOut(duration: 0.3)) {
-            columnVisibility = columnVisibility == .detailOnly ? .all : .detailOnly
-        }
-    }
 }
 
 private struct EmptySelectionView: View {
