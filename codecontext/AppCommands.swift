@@ -4,6 +4,12 @@ struct AppCommands: Commands {
     @FocusedValue(\._workspaceActions) private var actions
 
     var body: some Commands {
+        CommandGroup(before: .toolbar) {
+            Button("Toggle Sidebar", systemImage: "sidebar.left") { actions?.toggleSidebar() }
+                .keyboardShortcut("\\")
+            Divider()
+        }
+        
         CommandGroup(replacing: .newItem) {
             Button("New Tab", systemImage: "plus.rectangle.on.rectangle") { actions?.newTab() }
                 .keyboardShortcut("t")
@@ -23,11 +29,6 @@ struct AppCommands: Commands {
                 .keyboardShortcut("f")
         }
 
-        CommandGroup(before: .toolbar) {
-            Button("Toggle Sidebar", systemImage: "sidebar.left") { actions?.toggleSidebar() }
-                .keyboardShortcut("\\")
-            Divider()
-        }
     }
 }
 
@@ -59,7 +60,7 @@ struct WorkspaceActions {
         toggleFileTree: @escaping () -> Void,
         refresh: @escaping () -> Void,
         focusFilter: @escaping () -> Void,
-        toggleSidebar: @escaping () -> Void,
+        toggleSidebar: @escaping () -> Void
     ) {
         self.newTab = newTab
         self.openFolder = openFolder
