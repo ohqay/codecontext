@@ -382,16 +382,38 @@ actor StreamingContextEngine {
 
         func add(level: Int, items: [[String]]) {
             let grouped = Dictionary(grouping: items) { $0.first ?? "" }
-            let keys = grouped.keys.sorted()
-
-            for key in keys {
-                // Use simple indentation instead of Unicode tree characters
-                let indentation = String(repeating: "  ", count: level)
-                let stem = indentation + key
-                tree.append(stem)
-
+            
+            // Separate directories from files
+            let allKeys = grouped.keys
+            var directories: [String] = []
+            var files: [String] = []
+            
+            for key in allKeys {
                 let children = grouped[key]!.map { Array($0.dropFirst()) }.filter { !$0.isEmpty }
                 if !children.isEmpty {
+                    directories.append(key)
+                } else {
+                    files.append(key)
+                }
+            }
+            
+            // Sort directories and files separately, then combine with directories first
+            let sortedDirectories = directories.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+            let sortedFiles = files.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+            let sortedKeys = sortedDirectories + sortedFiles
+
+            for key in sortedKeys {
+                // Use simple indentation instead of Unicode tree characters
+                let indentation = String(repeating: "  ", count: level)
+                let children = grouped[key]!.map { Array($0.dropFirst()) }.filter { !$0.isEmpty }
+                let isDirectory = !children.isEmpty
+                
+                // Add trailing slash for directories
+                let displayName = isDirectory ? key + "/" : key
+                let stem = indentation + displayName
+                tree.append(stem)
+
+                if isDirectory {
                     add(level: level + 1, items: children)
                 }
             }
@@ -674,16 +696,38 @@ actor StreamingContextEngine {
 
         func add(level: Int, items: [[String]]) {
             let grouped = Dictionary(grouping: items) { $0.first ?? "" }
-            let keys = grouped.keys.sorted()
-
-            for key in keys {
-                // Use simple indentation instead of Unicode tree characters
-                let indentation = String(repeating: "  ", count: level)
-                let stem = indentation + key
-                tree.append(stem)
-
+            
+            // Separate directories from files
+            let allKeys = grouped.keys
+            var directories: [String] = []
+            var files: [String] = []
+            
+            for key in allKeys {
                 let children = grouped[key]!.map { Array($0.dropFirst()) }.filter { !$0.isEmpty }
                 if !children.isEmpty {
+                    directories.append(key)
+                } else {
+                    files.append(key)
+                }
+            }
+            
+            // Sort directories and files separately, then combine with directories first
+            let sortedDirectories = directories.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+            let sortedFiles = files.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+            let sortedKeys = sortedDirectories + sortedFiles
+
+            for key in sortedKeys {
+                // Use simple indentation instead of Unicode tree characters
+                let indentation = String(repeating: "  ", count: level)
+                let children = grouped[key]!.map { Array($0.dropFirst()) }.filter { !$0.isEmpty }
+                let isDirectory = !children.isEmpty
+                
+                // Add trailing slash for directories
+                let displayName = isDirectory ? key + "/" : key
+                let stem = indentation + displayName
+                tree.append(stem)
+
+                if isDirectory {
                     add(level: level + 1, items: children)
                 }
             }
