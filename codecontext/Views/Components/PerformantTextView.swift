@@ -61,6 +61,25 @@ struct PerformantTextView: NSViewRepresentable {
         // Only update if text changed to avoid unnecessary redraws
         if textView.string != text {
             textView.string = text
+            
+            // Force layout recalculation to ensure scroll view recognizes new content
+            textView.invalidateIntrinsicContentSize()
+            
+            // Ensure the layout manager processes the new text immediately
+            if let layoutManager = textView.layoutManager,
+               let textContainer = textView.textContainer {
+                layoutManager.ensureLayout(for: textContainer)
+            }
+            
+            // Update the text view size to fit the new content
+            textView.sizeToFit()
+            
+            // Force the scroll view to recalculate its content bounds
+            scrollView.reflectScrolledClipView(scrollView.contentView)
+            
+            // Ensure the view layout is updated immediately
+            scrollView.needsLayout = true
+            textView.needsLayout = true
         }
     }
 }
