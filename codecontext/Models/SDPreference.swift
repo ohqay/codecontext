@@ -41,7 +41,7 @@ final class SDPreference {
         defaultExcludeVenv: Bool = true,
         defaultExcludeDSStore: Bool = true,
         defaultExcludeDerivedData: Bool = true,
-        includeFileTreeInOutput: Bool = false,
+        includeFileTreeInOutput: Bool = true,
         enableSessionRestoration: Bool = true,
         lastActiveWorkspaceID: String? = nil
     ) {
