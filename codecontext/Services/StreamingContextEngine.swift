@@ -36,6 +36,10 @@ actor StreamingContextEngine {
 
     private let fragmentCache: XMLFragmentCache
     private let contentCache: FileContentCache
+    
+    // File tree caching to avoid unnecessary regeneration
+    private var cachedFileTreeXML: String?
+    private var cachedFileTreeHash: String?
 
     private var currentGeneration: Task<GenerationResult, Error>?
     private var debugLogs: [DebugInfo] = []
@@ -142,6 +146,9 @@ actor StreamingContextEngine {
 
         // Calculate token count for final XML
         updatedTokenCount = await TokenizerService.shared.countTokens(updatedXML)
+        
+        // Validate the final XML for file tree issues
+        validateFileTreeInXML(updatedXML)
 
         let duration = Date().timeIntervalSince(startTime)
         logDebug("Incremental update complete", details: "Duration: \(String(format: "%.3fs", duration))")
@@ -276,38 +283,44 @@ actor StreamingContextEngine {
     private func updateFileTreeInXML(_ xml: String, newTree: String) -> String {
         logDebug("updateFileTreeInXML", details: "Input XML length: \(xml.count), newTree length: \(newTree.count)")
 
-        // Replace existing <fileTree>...</fileTree> section
-        let pattern = "  <fileTree>.*?</fileTree>\n"
-
-        if let regex = try? NSRegularExpression(pattern: pattern, options: .dotMatchesLineSeparators) {
-            let range = NSRange(location: 0, length: xml.utf16.count)
-            let result = regex.stringByReplacingMatches(in: xml, options: [], range: range, withTemplate: newTree)
-            if result != xml {
-                logDebug("Used regex replacement", details: "Result length: \(result.count)")
-                return result
-            } else {
-                logDebug("Regex found no matches to replace", details: "Falling back to insertion")
-            }
-        } else {
-            logDebug("Regex creation failed", details: "Pattern: \(pattern)")
+        // First, remove ALL existing file trees to prevent duplication
+        let cleanedXML = removeAllFileTreesFromXML(xml)
+        let removedCount = (xml.components(separatedBy: "<fileTree>").count - 1) - (cleanedXML.components(separatedBy: "<fileTree>").count - 1)
+        if removedCount > 0 {
+            logDebug("Removed existing file trees", details: "Count: \(removedCount)")
         }
 
-        // If no existing tree, insert after <codebase> opening
-        if let range = xml.range(of: "<codebase>\n") {
-            var result = xml
+        // Then insert the new file tree after <codebase> opening
+        if let range = cleanedXML.range(of: "<codebase>\n") {
+            var result = cleanedXML
             let insertPoint = result.index(range.upperBound, offsetBy: 0)
             result.insert(contentsOf: newTree, at: insertPoint)
-            logDebug("Used insertion after <codebase>", details: "Result length: \(result.count)")
+            logDebug("Inserted new file tree", details: "Result length: \(result.count)")
             return result
         } else {
-            logDebug("Could not find <codebase>\\n in XML", details: "XML preview: \(xml.prefix(100))")
+            logDebug("Could not find <codebase>\\n in XML", details: "XML preview: \(cleanedXML.prefix(100))")
         }
 
-        logDebug("No insertion method worked", details: "Returning original XML")
-        return xml
+        logDebug("File tree insertion failed", details: "Returning cleaned XML without new tree")
+        return cleanedXML
+    }
+    
+    // Helper method to remove ALL file tree sections from XML
+    private func removeAllFileTreesFromXML(_ xml: String) -> String {
+        let pattern = "  <fileTree>.*?</fileTree>\n"
+        
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: .dotMatchesLineSeparators) else {
+            logDebug("Failed to create regex for file tree removal", details: "Pattern: \(pattern)")
+            return xml
+        }
+        
+        let range = NSRange(location: 0, length: xml.utf16.count)
+        let result = regex.stringByReplacingMatches(in: xml, options: [], range: range, withTemplate: "")
+        
+        return result
     }
 
-    // Helper method to generate file tree XML
+    // Helper method to generate file tree XML with caching
     private func generateFileTreeXML(
         allFiles: [FileInfo],
         rootURL: URL
@@ -320,6 +333,37 @@ actor StreamingContextEngine {
         // Filter out build artifacts before generating tree
         let filteredPaths = filterBuildArtifacts(allPaths)
         logDebug("After filtering artifacts", details: "filteredPaths.count: \(filteredPaths.count)")
+        
+        // Create hash of the file structure for caching
+        let fileStructureHash = computeFileStructureHash(filteredPaths: filteredPaths, rootURL: rootURL)
+        
+        // Check if we have a cached version with the same structure
+        if let cachedHash = cachedFileTreeHash,
+           let cachedXML = cachedFileTreeXML,
+           cachedHash == fileStructureHash {
+            logDebug("Using cached file tree", details: "Hash: \(fileStructureHash.prefix(8))...")
+            return cachedXML
+        }
+        
+        logDebug("Generating new file tree", details: "Hash changed or no cache")
+        let newTreeXML = generateFileTreeXMLInternal(filteredPaths: filteredPaths, rootURL: rootURL)
+        
+        // Cache the result
+        cachedFileTreeXML = newTreeXML
+        cachedFileTreeHash = fileStructureHash
+        
+        return newTreeXML
+    }
+    
+    // Helper method to compute hash of file structure for caching
+    private func computeFileStructureHash(filteredPaths: [String], rootURL: URL) -> String {
+        let sortedPaths = filteredPaths.sorted()
+        let combinedString = sortedPaths.joined(separator: "\n") + "\n" + rootURL.path
+        return String(combinedString.hashValue)
+    }
+    
+    // Internal method that actually generates the file tree XML
+    private func generateFileTreeXMLInternal(filteredPaths: [String], rootURL: URL) -> String {
 
         // Reuse existing tree generation logic with simple indentation
         let urls = filteredPaths.map { URL(fileURLWithPath: $0) }
@@ -369,6 +413,44 @@ actor StreamingContextEngine {
         logDebug("Clearing all caches")
         await fragmentCache.clear()
         await contentCache.clear()
+        clearFileTreeCache()
+    }
+    
+    /// Clear only the file tree cache (useful when workspace structure changes)
+    func clearFileTreeCache() {
+        cachedFileTreeXML = nil
+        cachedFileTreeHash = nil
+        logDebug("Cleared file tree cache")
+    }
+    
+    /// Validate XML for file tree issues and log warnings
+    private func validateFileTreeInXML(_ xml: String) {
+        let fileTreeCount = xml.components(separatedBy: "<fileTree>").count - 1
+        
+        if fileTreeCount > 1 {
+            logDebug("WARNING: Multiple file trees detected", details: "Count: \(fileTreeCount) - this may cause token count inflation")
+        } else if fileTreeCount == 1 {
+            logDebug("File tree validation passed", details: "Exactly 1 file tree found")
+        } else {
+            logDebug("File tree validation", details: "No file trees found")
+        }
+    }
+    
+    /// Clean up duplicate file trees in existing XML (recovery mechanism)
+    func cleanupDuplicateFileTrees(in xml: String) -> String {
+        let originalCount = xml.components(separatedBy: "<fileTree>").count - 1
+        
+        if originalCount <= 1 {
+            return xml // No duplicates to clean up
+        }
+        
+        logDebug("Cleaning up duplicate file trees", details: "Original count: \(originalCount)")
+        
+        // Remove all file trees, then we'll add back just one if needed
+        let cleanedXML = removeAllFileTreesFromXML(xml)
+        
+        logDebug("Duplicate file trees removed", details: "Cleaned \(originalCount) duplicates")
+        return cleanedXML
     }
 
     /// Get debug logs for troubleshooting
