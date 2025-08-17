@@ -282,8 +282,12 @@ actor StreamingContextEngine {
         if let regex = try? NSRegularExpression(pattern: pattern, options: .dotMatchesLineSeparators) {
             let range = NSRange(location: 0, length: xml.utf16.count)
             let result = regex.stringByReplacingMatches(in: xml, options: [], range: range, withTemplate: newTree)
-            logDebug("Used regex replacement", details: "Result length: \(result.count)")
-            return result
+            if result != xml {
+                logDebug("Used regex replacement", details: "Result length: \(result.count)")
+                return result
+            } else {
+                logDebug("Regex found no matches to replace", details: "Falling back to insertion")
+            }
         } else {
             logDebug("Regex creation failed", details: "Pattern: \(pattern)")
         }
