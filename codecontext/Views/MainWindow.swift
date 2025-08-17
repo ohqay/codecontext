@@ -21,6 +21,7 @@ struct MainWindow: View {
     @State private var filterFocused: Bool = false
     @State private var filterText: String = ""
     @State private var showWorkspaceList = false
+    @State private var hasAttemptedRestore = false
 
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
@@ -141,18 +142,17 @@ struct MainWindow: View {
     }
 
     private func restoreLastSessionIfNeeded() {
-        // Only restore if no workspace is currently selected and we have workspaces available
-        guard selection == nil, !workspaces.isEmpty else {
+        // Only restore once and only if we have workspaces available
+        guard !hasAttemptedRestore, !workspaces.isEmpty else {
             return
         }
 
+        hasAttemptedRestore = true
+
         // Attempt to restore the last session
         if let restoredWorkspace = SessionManager.shared.restoreLastSession(modelContext: modelContext) {
-            // Use a small delay to ensure the UI is ready
-            DispatchQueue.main.async {
-                self.selection = restoredWorkspace
-                print("[MainWindow] Auto-restored workspace: \(restoredWorkspace.name)")
-            }
+            selection = restoredWorkspace
+            print("[MainWindow] Auto-restored workspace: \(restoredWorkspace.name)")
         }
     }
 

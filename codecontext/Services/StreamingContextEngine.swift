@@ -115,7 +115,6 @@ actor StreamingContextEngine {
                     language: languageHint,
                     content: content
                 ))
-                newFilesXML.append("\n")
             }
 
             // Insert new files before closing </codebase> tag
@@ -180,7 +179,9 @@ actor StreamingContextEngine {
     // Helper method to wrap context XML with user instructions at top and bottom
     private func wrapWithUserInstructions(_ xml: String, instructions: String) -> String {
         let instructionsXML = "<userInstructions>\n\(instructions)\n</userInstructions>\n\n"
-        let wrappedXML = instructionsXML + xml + "\n" + instructionsXML
+        // Ensure XML ends with newline before adding closing instructions
+        let trimmedXML = xml.trimmingCharacters(in: .whitespacesAndNewlines)
+        let wrappedXML = instructionsXML + trimmedXML + "\n\n<userInstructions>\n\(instructions)\n</userInstructions>\n"
         return wrappedXML
     }
 
