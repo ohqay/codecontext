@@ -152,6 +152,12 @@ actor StreamingXMLGenerator {
     }
 
     // MARK: - Private Methods
+    
+    /// Debug logging helper
+    private func logDebug(_ message: String, details: String = "") {
+        // Simple debug logging - in production app you'd use your logging framework
+        print("[StreamingXMLGenerator] \(message): \(details)")
+    }
 
     /// Process a single file using streaming approach
     private func processFileStreaming(
@@ -175,31 +181,41 @@ actor StreamingXMLGenerator {
             language: languageHint
         )
 
-        // Stream file content in chunks
-        let handle = try FileHandle(forReadingFrom: file.url)
-        defer { try? handle.close() }
-
+        // Stream file content in chunks using async reading
         var totalBytes: Int64 = 0
-
+        var offset: UInt64 = 0
+        
         while !isCancelled {
-            autoreleasepool {
-                // Read chunk
-                let chunk = handle.readData(ofLength: config.chunkSize)
-
-                // Check if we're done
-                guard !chunk.isEmpty else { return }
-
-                // Convert to string and write
-                if let chunkString = String(data: chunk, encoding: .utf8) {
-                    Task {
-                        await xmlWriter.writeContent(chunkString)
-                    }
-                    totalBytes += Int64(chunk.count)
-                }
+            // Use async file reading to avoid blocking the actor
+            let chunk: Data
+            do {
+                // Read chunk asynchronously using FileHandle's async API
+                let handle = try FileHandle(forReadingFrom: file.url)
+                defer { try? handle.close() }
+                
+                try handle.seek(toOffset: offset)
+                chunk = try handle.read(upToCount: config.chunkSize) ?? Data()
+            } catch {
+                // Handle read errors gracefully
+                logDebug("File read error", details: "File: \(file.url.path), Error: \(error)")
+                break
             }
 
-            // Break if no more data
-            if handle.availableData.isEmpty {
+            // Check if we're done
+            guard !chunk.isEmpty else { break }
+
+            // Convert to string and write
+            if let chunkString = String(data: chunk, encoding: .utf8) {
+                await xmlWriter.writeContent(chunkString)
+                totalBytes += Int64(chunk.count)
+                offset += UInt64(chunk.count)
+            } else {
+                // Skip non-UTF8 content
+                offset += UInt64(chunk.count)
+            }
+            
+            // If chunk is smaller than requested, we've reached EOF
+            if chunk.count < config.chunkSize {
                 break
             }
         }

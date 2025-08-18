@@ -60,26 +60,21 @@ struct PerformantTextView: NSViewRepresentable {
 
         // Only update if text changed to avoid unnecessary redraws
         if textView.string != text {
+            // Batch all layout operations to minimize thrashing
             textView.string = text
             
-            // Force layout recalculation to ensure scroll view recognizes new content
+            // Single layout pass - let AppKit handle the layout naturally
+            // This is much more efficient than forcing multiple layout operations
             textView.invalidateIntrinsicContentSize()
             
-            // Ensure the layout manager processes the new text immediately
-            if let layoutManager = textView.layoutManager,
-               let textContainer = textView.textContainer {
-                layoutManager.ensureLayout(for: textContainer)
+            // Schedule layout on next run loop cycle to batch with other updates
+            DispatchQueue.main.async {
+                textView.sizeToFit()
+                // Only update content view if necessary
+                if scrollView.documentVisibleRect != scrollView.contentView.visibleRect {
+                    scrollView.reflectScrolledClipView(scrollView.contentView)
+                }
             }
-            
-            // Update the text view size to fit the new content
-            textView.sizeToFit()
-            
-            // Force the scroll view to recalculate its content bounds
-            scrollView.reflectScrolledClipView(scrollView.contentView)
-            
-            // Ensure the view layout is updated immediately
-            scrollView.needsLayout = true
-            textView.needsLayout = true
         }
     }
 }

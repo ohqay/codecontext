@@ -94,7 +94,7 @@ final class WorkspaceEngine {
         )
         let scanResult = scanner.scanWithExclusions(root: root, options: options)
 
-        // Use streaming generator for better performance
+        // Use streaming generator - commit fully to optimized approach
         do {
             let xmlString = try await streamingGenerator.generateStreaming(
                 codebaseRoot: root,
@@ -108,24 +108,9 @@ final class WorkspaceEngine {
             let tokenCount = await TokenizerService.shared.countTokens(xmlString)
             return Output(xml: xmlString, totalTokens: tokenCount)
         } catch {
-            // Fall back to progressive generator if streaming fails
-            print("Streaming generation failed: \(error). Falling back to progressive generator.")
-
-            let xml = await progressiveGenerator.generateProgressive(
-                codebaseRoot: root,
-                files: scanResult.includedFiles,
-                selectedPaths: selectedFilePaths,
-                includeTree: includeTree
-            ) { progress in
-                onProgress(progress.current, progress.total)
-            }
-
-            guard let xmlString = xml else {
-                return nil // Cancelled
-            }
-
-            let tokenCount = await TokenizerService.shared.countTokens(xmlString)
-            return Output(xml: xmlString, totalTokens: tokenCount)
+            // Log the error and return nil instead of falling back
+            print("Streaming generation failed: \(error). Fix the streaming implementation rather than using fallback.")
+            return nil
         }
     }
 
@@ -238,7 +223,7 @@ final class WorkspaceEngine {
     func generateFromFileTree(_ fileTreeModel: FileTreeModel, includeTree: Bool) async -> Output? {
         guard let root = fileTreeModel.rootNode?.url else { return nil }
 
-        let selectedFiles = fileTreeModel.rootNode?.getSelectedFiles() ?? []
+        let selectedFiles = await fileTreeModel.rootNode?.getSelectedFiles() ?? []
         guard !selectedFiles.isEmpty else {
             return Output(xml: "No files selected", totalTokens: 0)
         }

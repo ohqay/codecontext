@@ -162,18 +162,41 @@ actor StreamingContextEngine {
 
     // Helper method to strip existing user instructions from XML
     private func stripExistingUserInstructions(_ xml: String) -> String {
-        // Pattern to match userInstructions at the beginning and end of XML
-        let pattern = "^<userInstructions>.*?</userInstructions>\\s*\\n*|\\n*\\s*<userInstructions>.*?</userInstructions>\\s*$"
-
-        do {
-            let regex = try NSRegularExpression(pattern: pattern, options: [.dotMatchesLineSeparators])
-            let range = NSRange(location: 0, length: xml.utf16.count)
-            let result = regex.stringByReplacingMatches(in: xml, options: [], range: range, withTemplate: "")
-            return result
-        } catch {
-            logDebug("Failed to strip user instructions", details: "Error: \(error)")
-            return xml
+        var result = xml
+        
+        // Remove userInstructions from the beginning
+        if result.hasPrefix("<userInstructions>") {
+            if let endRange = result.range(of: "</userInstructions>") {
+                let afterEnd = result.index(endRange.upperBound, offsetBy: 0)
+                // Skip any whitespace/newlines after the closing tag
+                var skipIndex = afterEnd
+                while skipIndex < result.endIndex && result[skipIndex].isWhitespace {
+                    skipIndex = result.index(after: skipIndex)
+                }
+                result = String(result[skipIndex...])
+            }
         }
+        
+        // Remove userInstructions from the end
+        if let startRange = result.range(of: "<userInstructions>", options: .backwards) {
+            // Find the corresponding closing tag
+            let searchStart = startRange.upperBound
+            if let endRange = result.range(of: "</userInstructions>", range: searchStart..<result.endIndex) {
+                // Remove everything from the start tag to end of string, including any preceding whitespace
+                var trimStart = startRange.lowerBound
+                while trimStart > result.startIndex {
+                    let prevIndex = result.index(before: trimStart)
+                    if result[prevIndex].isWhitespace {
+                        trimStart = prevIndex
+                    } else {
+                        break
+                    }
+                }
+                result = String(result[..<trimStart])
+            }
+        }
+        
+        return result
     }
 
     // Helper method to wrap context XML with user instructions at top and bottom
@@ -197,42 +220,54 @@ actor StreamingContextEngine {
             relativePath = path
         }
 
-        // Escape special regex characters in the path
-        let escapedPath = NSRegularExpression.escapedPattern(for: relativePath)
-
-        // Find and remove the file section by matching the Path: line
-        // Pattern: <file=filename>...Path: relativePath...content...</file=filename>
-        // Note: The closing tag includes the filename, so we need to capture and match it
-        let pattern = "  <file=([^>]+)>\\s*\\n  Path: \(escapedPath)\\s*\\n.*?</file=\\1>\\s*\\n"
-
-        do {
-            let regex = try NSRegularExpression(pattern: pattern, options: .dotMatchesLineSeparators)
-            let range = NSRange(location: 0, length: xml.utf16.count)
-            let result = regex.stringByReplacingMatches(in: xml, options: [], range: range, withTemplate: "")
-
-            // Enhanced logging to help debug path conversion issues
-            if result != xml {
-                logDebug("File removed from XML", details: "Absolute: \(path) → Relative: \(relativePath)")
-            } else {
-                logDebug("File removal failed - regex no match", details: "Absolute: \(path) → Relative: \(relativePath)")
-                logDebug("Regex pattern used", details: pattern)
-                // Additional debug: show what paths are actually in the XML
-                let xmlPaths = extractAllPathsFromXML(xml)
-                logDebug("Available paths in XML", details: "\(xmlPaths.prefix(10))")
-                // Show a snippet of the XML around the expected location
-                if let pathLocation = xml.range(of: "Path: \(relativePath)") {
-                    let start = xml.index(pathLocation.lowerBound, offsetBy: -50, limitedBy: xml.startIndex) ?? xml.startIndex
-                    let end = xml.index(pathLocation.upperBound, offsetBy: 100, limitedBy: xml.endIndex) ?? xml.endIndex
-                    let snippet = String(xml[start ..< end])
-                    logDebug("XML snippet around target", details: snippet.replacingOccurrences(of: "\n", with: "\\n"))
-                }
-            }
-
-            return result
-        } catch {
-            logDebug("File removal failed - regex error", details: "Path: \(relativePath), Error: \(error)")
+        // Find the path line to locate the file section
+        let pathLine = "  Path: \(relativePath)"
+        guard let pathRange = xml.range(of: pathLine) else {
+            logDebug("File removal failed - path not found", details: "Relative: \(relativePath)")
             return xml
         }
+        
+        // Find the opening tag by searching backwards from the path line
+        var searchStart = pathRange.lowerBound
+        while searchStart > xml.startIndex {
+            let prevIndex = xml.index(before: searchStart)
+            if xml[prevIndex] == ">" {
+                // Found potential end of opening tag, find the start
+                var tagStart = prevIndex
+                while tagStart > xml.startIndex && xml[tagStart] != "<" {
+                    tagStart = xml.index(before: tagStart)
+                }
+                
+                if xml[tagStart] == "<" && xml[tagStart...prevIndex].hasPrefix("<file=") {
+                    // Extract filename from opening tag
+                    let openingTag = String(xml[tagStart...prevIndex])
+                    if let filenameStart = openingTag.range(of: "<file=")?.upperBound,
+                       let filenameEnd = openingTag.range(of: ">")?.lowerBound {
+                        let filename = String(openingTag[filenameStart..<filenameEnd])
+                        
+                        // Find the corresponding closing tag
+                        let closingTag = "</file=\(filename)>"
+                        if let closingRange = xml.range(of: closingTag, range: pathRange.upperBound..<xml.endIndex) {
+                            // Include any trailing newline after closing tag
+                            var endIndex = closingRange.upperBound
+                            if endIndex < xml.endIndex && xml[endIndex] == "\n" {
+                                endIndex = xml.index(after: endIndex)
+                            }
+                            
+                            // Remove the entire file section
+                            let result = String(xml[..<tagStart]) + String(xml[endIndex...])
+                            logDebug("File removed from XML", details: "Absolute: \(path) → Relative: \(relativePath)")
+                            return result
+                        }
+                    }
+                }
+                break
+            }
+            searchStart = prevIndex
+        }
+        
+        logDebug("File removal failed - file section not found", details: "Absolute: \(path) → Relative: \(relativePath)")
+        return xml
     }
 
     // Helper method to extract all paths from XML for debugging
@@ -356,11 +391,27 @@ actor StreamingContextEngine {
         return newTreeXML
     }
     
-    // Helper method to compute hash of file structure for caching
+    // Helper method to compute deterministic hash of file structure for caching
     private func computeFileStructureHash(filteredPaths: [String], rootURL: URL) -> String {
         let sortedPaths = filteredPaths.sorted()
         let combinedString = sortedPaths.joined(separator: "\n") + "\n" + rootURL.path
-        return String(combinedString.hashValue)
+        
+        // Use a deterministic hash that remains consistent across app launches
+        return deterministicHash(of: combinedString)
+    }
+    
+    // Helper method to compute deterministic hash using simple but stable algorithm
+    private func deterministicHash(of string: String) -> String {
+        // Use FNV-1a hash algorithm for deterministic hashing
+        let fnvPrime: UInt64 = 1099511628211
+        var hash: UInt64 = 14695981039346656037
+        
+        for byte in string.utf8 {
+            hash ^= UInt64(byte)
+            hash = hash.multipliedReportingOverflow(by: fnvPrime).partialValue
+        }
+        
+        return String(hash)
     }
     
     // Internal method that actually generates the file tree XML

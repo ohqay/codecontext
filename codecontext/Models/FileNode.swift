@@ -41,31 +41,54 @@ final class FileNode: Identifiable, Hashable {
         hasher.combine(id)
     }
 
-    // Recursively calculate aggregate token counts
-    func updateAggregateTokens() {
+    // Recursively calculate aggregate token counts - optimized to run off main thread
+    func updateAggregateTokens() async {
         if isDirectory {
             // First ensure all children have their aggregate counts updated
-            for child in children {
-                child.updateAggregateTokens()
+            await withTaskGroup(of: Void.self) { group in
+                for child in children {
+                    group.addTask {
+                        await child.updateAggregateTokens()
+                    }
+                }
             }
-            // Then sum them up
-            aggregateTokenCount = children.reduce(0) { $0 + $1.aggregateTokenCount }
+            
+            // Then sum them up on main actor to ensure thread safety
+            await MainActor.run {
+                self.aggregateTokenCount = self.children.reduce(0) { $0 + $1.aggregateTokenCount }
+            }
         } else {
             // For files, aggregate count is just the token count
-            aggregateTokenCount = tokenCount
+            await MainActor.run {
+                self.aggregateTokenCount = self.tokenCount
+            }
         }
     }
 
-    // Recursively get all selected files
-    func getSelectedFiles() -> [FileNode] {
-        var selected: [FileNode] = []
-        if !isDirectory && isSelected {
-            selected.append(self)
+    // Recursively get all selected files - optimized for performance
+    func getSelectedFiles() async -> [FileNode] {
+        return await withTaskGroup(of: [FileNode].self) { group in
+            var selected: [FileNode] = []
+            
+            // Add this file if it's selected
+            if !isDirectory && isSelected {
+                selected.append(self)
+            }
+            
+            // Process children concurrently
+            for child in children {
+                group.addTask {
+                    await child.getSelectedFiles()
+                }
+            }
+            
+            // Collect results
+            for await childSelected in group {
+                selected.append(contentsOf: childSelected)
+            }
+            
+            return selected
         }
-        for child in children {
-            selected.append(contentsOf: child.getSelectedFiles())
-        }
-        return selected
     }
 
     // Toggle selection recursively for directories
@@ -188,8 +211,10 @@ final class FileTreeModel {
             }
         }
 
-        // Update aggregate counts
-        rootNode?.updateAggregateTokens()
+        // Update aggregate counts off main thread
+        if let rootNode = rootNode {
+            await rootNode.updateAggregateTokens()
+        }
 
         // Notify outline view that token values changed so visible rows update
         NotificationCenter.default.post(name: .outlineViewNeedsRefresh, object: nil)
@@ -316,11 +341,13 @@ final class FileTreeModel {
         applyToNode(node, shouldSelect: update.isSelected)
     }
 
-    private func updateTotalSelectedTokens() {
-        let selectedFiles = rootNode?.getSelectedFiles() ?? []
+    private func updateTotalSelectedTokens() async {
+        let selectedFiles = await rootNode?.getSelectedFiles() ?? []
         totalSelectedTokens = selectedFiles.reduce(0) { $0 + $1.tokenCount }
         // Also ensure aggregate counts are up to date
-        rootNode?.updateAggregateTokens()
+        if let rootNode = rootNode {
+            await rootNode.updateAggregateTokens()
+        }
     }
 
     // Restore selections from saved JSON data
@@ -342,7 +369,9 @@ final class FileTreeModel {
             }
         }
 
-        updateTotalSelectedTokens()
+        Task {
+            await updateTotalSelectedTokens()
+        }
     }
 
     // Refresh the file tree by rescanning the directory
@@ -370,7 +399,9 @@ final class FileTreeModel {
             }
         }
 
-        updateTotalSelectedTokens()
+        Task {
+            await updateTotalSelectedTokens()
+        }
     }
 
     // MARK: - File System Watching
@@ -458,7 +489,9 @@ final class FileTreeModel {
             }
         }
 
-        updateTotalSelectedTokens()
+        Task {
+            await updateTotalSelectedTokens()
+        }
 
         // Ensure visible token labels are refreshed
         NotificationCenter.default.post(name: .outlineViewNeedsRefresh, object: nil)
@@ -480,8 +513,12 @@ final class FileTreeModel {
 
                             if oldTokenCount != result.tokenCount {
                                 print("Updated token count for \(node.name): \(oldTokenCount) -> \(result.tokenCount)")
-                                // Update aggregate counts up the tree
-                                node.parent?.updateAggregateTokens()
+                                // Update aggregate counts up the tree asynchronously
+                                if let parent = node.parent {
+                                    Task {
+                                        await parent.updateAggregateTokens()
+                                    }
+                                }
                             }
                         }
                     }
@@ -489,7 +526,9 @@ final class FileTreeModel {
             }
 
             await MainActor.run {
-                updateTotalSelectedTokens()
+                Task {
+            await updateTotalSelectedTokens()
+        }
                 // Make sure the tokens column updates for visible rows
                 NotificationCenter.default.post(name: .outlineViewNeedsRefresh, object: nil)
             }

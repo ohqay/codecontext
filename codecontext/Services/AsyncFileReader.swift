@@ -8,8 +8,8 @@ actor AsyncFileReader {
 
     /// Read file asynchronously without blocking
     func readFile(at url: URL) async throws -> String {
-        // Use async URL loading which doesn't block the calling thread
-        let (data, _) = try await URLSession.shared.data(from: url)
+        // Use direct FileHandle for better performance with local files
+        let data = try await readFileData(at: url)
 
         guard let text = String(data: data, encoding: .utf8) else {
             throw FileReaderError.encodingError
@@ -18,10 +18,22 @@ actor AsyncFileReader {
         return text
     }
 
-    /// Read file data asynchronously
+    /// Read file data asynchronously using optimized FileHandle
     func readFileData(at url: URL) async throws -> Data {
-        let (data, _) = try await URLSession.shared.data(from: url)
-        return data
+        return try await withCheckedThrowingContinuation { continuation in
+            Task.detached {
+                do {
+                    // Use FileHandle for efficient local file reading
+                    let fileHandle = try FileHandle(forReadingFrom: url)
+                    defer { try? fileHandle.close() }
+                    
+                    let data = try fileHandle.readToEnd() ?? Data()
+                    continuation.resume(returning: data)
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
     }
 
     /// Stream file contents line by line for memory efficiency

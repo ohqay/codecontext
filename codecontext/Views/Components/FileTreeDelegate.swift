@@ -36,7 +36,7 @@ final class FileTreeDelegate: NSObject, NSOutlineViewDelegate {
         }
 
         outlineView.forEachVisibleNode { (_, node: FileNode) in
-            if node.hashValue == sender.tag {
+            if node.id.hashValue == sender.tag {
                 onCheckboxToggled?(node)
                 return true
             }

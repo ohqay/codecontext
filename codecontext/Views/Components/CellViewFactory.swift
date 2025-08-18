@@ -32,7 +32,7 @@ struct CellViewFactory {
     ) {
         let checkbox = NSButton(checkboxWithTitle: "", target: target, action: action)
         checkbox.state = node.isSelected ? .on : .off
-        checkbox.tag = node.hashValue
+        checkbox.tag = node.id.hashValue
         container.applyTrailingConstraints(to: checkbox)
     }
 

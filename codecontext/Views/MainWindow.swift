@@ -80,9 +80,9 @@ struct MainWindow: View {
                 .symbolVariant(columnVisibility == .detailOnly ? .none : .fill)
                 .help(columnVisibility == .detailOnly ? "Show Sidebar" : "Hide Sidebar")
             }
-            
+
             ToolbarSpacer(.fixed)
-            
+
             ToolbarItem {
                 GlassButton(
                     systemImage: "doc.on.doc",
@@ -105,34 +105,35 @@ struct MainWindow: View {
             }
 
             // Save the current session for restoration
-            SessionManager.shared.saveCurrentSession(workspace: newWorkspace, modelContext: modelContext)
+            SessionManager.shared.saveCurrentSession(
+                workspace: newWorkspace, modelContext: modelContext)
         }
     }
 
     private func ensureDefaultPreference() {
         let fetch = FetchDescriptor<SDPreference>()
         let preferences = (try? modelContext.fetch(fetch)) ?? []
-        
+
         if preferences.isEmpty {
             modelContext.insert(SDPreference())
         }
-        
+
         // Load preference values into AppState
         loadPreferencesIntoAppState()
     }
-    
+
     private func loadPreferencesIntoAppState() {
         let fetch = FetchDescriptor<SDPreference>()
         if let preference = try? modelContext.fetch(fetch).first {
             appState.includeFileTreeInOutput = preference.includeFileTreeInOutput
-            appState.includeInstructionsInOutput = true // Keep existing behavior for instructions
+            appState.includeInstructionsInOutput = true  // Keep existing behavior for instructions
         }
     }
-    
+
     private func toggleFileTree() {
         // Toggle the AppState value
         appState.includeFileTreeInOutput.toggle()
-        
+
         // Persist to database
         let fetch = FetchDescriptor<SDPreference>()
         if let preference = try? modelContext.fetch(fetch).first {
@@ -150,7 +151,9 @@ struct MainWindow: View {
         hasAttemptedRestore = true
 
         // Attempt to restore the last session
-        if let restoredWorkspace = SessionManager.shared.restoreLastSession(modelContext: modelContext) {
+        if let restoredWorkspace = SessionManager.shared.restoreLastSession(
+            modelContext: modelContext)
+        {
             selection = restoredWorkspace
             print("[MainWindow] Auto-restored workspace: \(restoredWorkspace.name)")
         }
@@ -272,7 +275,7 @@ struct GlassButton: View {
         .modifier(GlassButtonModifier(isProminent: isProminent))
         .cornerRadius(.greatestFiniteMagnitude)
         .focusEffectDisabled()
-        .scaleEffect(isHoverable && isHovered ? 1.03 : 1.0)
+        .scaleEffect(isHoverable && isHovered ? 1.04 : 1.0)
         .animation(.easeInOut(duration: 0.10), value: isHovered)
         .onHover { hovering in
             if isHoverable {

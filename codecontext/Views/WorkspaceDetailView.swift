@@ -81,7 +81,8 @@ struct WorkspaceDetailView: View {
                 notificationSystem: notificationSystem,
                 onLoad: updateSelectedFileCount,
                 loadAllFiles: loadAllFiles,
-                regenerateOutput: regenerateOutput
+                regenerateOutput: regenerateOutput,
+                scheduleRegeneration: scheduleRegeneration
             ))
     }
 
@@ -214,14 +215,14 @@ struct WorkspaceDetailView: View {
         }
     }
 
-    private func scheduleRegeneration() {
+    private func scheduleRegeneration(delay: UInt64 = 500_000_000) {
         // Cancel any existing regeneration task
         regenerationTask?.cancel()
 
-        // Schedule new regeneration with longer debouncing for large selections
+        // Schedule new regeneration with configurable debouncing
         regenerationTask = Task {
-            // Debounce for 500ms to allow selection operations to complete
-            try? await Task.sleep(nanoseconds: 500_000_000)
+            // Debounce to allow operations to complete (default 500ms)
+            try? await Task.sleep(nanoseconds: delay)
 
             // Check if task was cancelled
             if !Task.isCancelled {
@@ -375,6 +376,7 @@ private struct LifecycleHandlers: ViewModifier {
     let onLoad: () -> Void
     let loadAllFiles: () async -> Void
     let regenerateOutput: () async -> Void
+    let scheduleRegeneration: (UInt64) -> Void
 
     func body(content: Content) -> some View {
         content
@@ -386,9 +388,9 @@ private struct LifecycleHandlers: ViewModifier {
                 // Load all files for the workspace
                 await loadAllFiles()
 
-                // Update counts and generate initial output
+                // Update counts and generate initial output with minimal delay
                 onLoad()
-                await regenerateOutput()
+                scheduleRegeneration(100_000_000) // 100ms for initial load
             }
             .onDisappear {
                 // Cancel any pending regeneration when view disappears
