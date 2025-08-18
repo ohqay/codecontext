@@ -326,7 +326,9 @@ private struct OutputNotificationHandlers: ViewModifier {
         content
             .onReceive(NotificationCenter.default.publisher(for: .requestCopyOutput)) { _ in
                 NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(output, forType: .string)
+                // Clean boundaries before copying to clipboard
+                let cleanedOutput = BoundaryManager.cleanForDisplay(output)
+                NSPasteboard.general.setString(cleanedOutput, forType: .string)
             }
             .onReceive(NotificationCenter.default.publisher(for: .requestRefresh)) { _ in
                 Task { await onRefresh() }

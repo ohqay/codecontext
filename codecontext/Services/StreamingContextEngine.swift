@@ -162,50 +162,23 @@ actor StreamingContextEngine {
 
     // Helper method to strip existing user instructions from XML
     private func stripExistingUserInstructions(_ xml: String) -> String {
-        var result = xml
-        
-        // Remove userInstructions from the beginning
-        if result.hasPrefix("<userInstructions>") {
-            if let endRange = result.range(of: "</userInstructions>") {
-                let afterEnd = result.index(endRange.upperBound, offsetBy: 0)
-                // Skip any whitespace/newlines after the closing tag
-                var skipIndex = afterEnd
-                while skipIndex < result.endIndex && result[skipIndex].isWhitespace {
-                    skipIndex = result.index(after: skipIndex)
-                }
-                result = String(result[skipIndex...])
-            }
-        }
-        
-        // Remove userInstructions from the end
-        if let startRange = result.range(of: "<userInstructions>", options: .backwards) {
-            // Find the corresponding closing tag
-            let searchStart = startRange.upperBound
-            if let endRange = result.range(of: "</userInstructions>", range: searchStart..<result.endIndex) {
-                // Remove everything from the start tag to end of string, including any preceding whitespace
-                var trimStart = startRange.lowerBound
-                while trimStart > result.startIndex {
-                    let prevIndex = result.index(before: trimStart)
-                    if result[prevIndex].isWhitespace {
-                        trimStart = prevIndex
-                    } else {
-                        break
-                    }
-                }
-                result = String(result[..<trimStart])
-            }
-        }
-        
-        return result
+        // Use BoundaryManager to safely remove all user instruction sections
+        return BoundaryManager.remove(xml, type: .userInstructions)
     }
 
     // Helper method to wrap context XML with user instructions at top and bottom
     private func wrapWithUserInstructions(_ xml: String, instructions: String) -> String {
-        let instructionsXML = "<userInstructions>\n\(instructions)\n</userInstructions>\n\n"
-        // Ensure XML ends with newline before adding closing instructions
-        let trimmedXML = xml.trimmingCharacters(in: .whitespacesAndNewlines)
-        let wrappedXML = instructionsXML + trimmedXML + "\n\n<userInstructions>\n\(instructions)\n</userInstructions>\n"
-        return wrappedXML
+        let instructionsXML = "<userInstructions>\n\(instructions)\n</userInstructions>"
+        
+        // Wrap instructions with boundary markers
+        let topInstructions = BoundaryManager.wrap(instructionsXML, type: .userInstructions)
+        let bottomInstructions = BoundaryManager.wrap(instructionsXML, type: .userInstructions)
+        
+        // Wrap the entire codebase section with boundaries
+        let codebaseContent = "<codebase>\n\(xml)\n</codebase>"
+        let wrappedCodebase = BoundaryManager.wrap(codebaseContent, type: .codebase)
+        
+        return "\(topInstructions)\n\n\(wrappedCodebase)\n\n\(bottomInstructions)\n"
     }
 
     // Helper method to remove a file section from XML
@@ -220,50 +193,20 @@ actor StreamingContextEngine {
             relativePath = path
         }
 
-        // Find the path line to locate the file section
-        let pathLine = "  Path: \(relativePath)"
-        guard let pathRange = xml.range(of: pathLine) else {
-            logDebug("File removal failed - path not found", details: "Relative: \(relativePath)")
-            return xml
-        }
+        // Extract all file sections using BoundaryManager
+        let fileContents = BoundaryManager.extract(xml, type: .file)
+        var result = xml
         
-        // Find the opening tag by searching backwards from the path line
-        var searchStart = pathRange.lowerBound
-        while searchStart > xml.startIndex {
-            let prevIndex = xml.index(before: searchStart)
-            if xml[prevIndex] == ">" {
-                // Found potential end of opening tag, find the start
-                var tagStart = prevIndex
-                while tagStart > xml.startIndex && xml[tagStart] != "<" {
-                    tagStart = xml.index(before: tagStart)
-                }
-                
-                if xml[tagStart] == "<" && xml[tagStart...prevIndex].hasPrefix("<file=") {
-                    // Extract filename from opening tag
-                    let openingTag = String(xml[tagStart...prevIndex])
-                    if let filenameStart = openingTag.range(of: "<file=")?.upperBound,
-                       let filenameEnd = openingTag.range(of: ">")?.lowerBound {
-                        let filename = String(openingTag[filenameStart..<filenameEnd])
-                        
-                        // Find the corresponding closing tag
-                        let closingTag = "</file=\(filename)>"
-                        if let closingRange = xml.range(of: closingTag, range: pathRange.upperBound..<xml.endIndex) {
-                            // Include any trailing newline after closing tag
-                            var endIndex = closingRange.upperBound
-                            if endIndex < xml.endIndex && xml[endIndex] == "\n" {
-                                endIndex = xml.index(after: endIndex)
-                            }
-                            
-                            // Remove the entire file section
-                            let result = String(xml[..<tagStart]) + String(xml[endIndex...])
-                            logDebug("File removed from XML", details: "Absolute: \(path) → Relative: \(relativePath)")
-                            return result
-                        }
-                    }
-                }
-                break
+        // Find and remove the matching file section
+        for fileContent in fileContents {
+            let pathLine = "  Path: \(relativePath)"
+            if fileContent.contains(pathLine) {
+                // Found the file to remove - remove this specific boundary section
+                let wrappedFile = BoundaryManager.wrap(fileContent, type: .file)
+                result = result.replacingOccurrences(of: wrappedFile, with: "")
+                logDebug("File removed from XML", details: "Absolute: \(path) → Relative: \(relativePath)")
+                return result
             }
-            searchStart = prevIndex
         }
         
         logDebug("File removal failed - file section not found", details: "Absolute: \(path) → Relative: \(relativePath)")
@@ -343,17 +286,8 @@ actor StreamingContextEngine {
     
     // Helper method to remove ALL file tree sections from XML
     private func removeAllFileTreesFromXML(_ xml: String) -> String {
-        let pattern = "  <fileTree>.*?</fileTree>\n"
-        
-        guard let regex = try? NSRegularExpression(pattern: pattern, options: .dotMatchesLineSeparators) else {
-            logDebug("Failed to create regex for file tree removal", details: "Pattern: \(pattern)")
-            return xml
-        }
-        
-        let range = NSRange(location: 0, length: xml.utf16.count)
-        let result = regex.stringByReplacingMatches(in: xml, options: [], range: range, withTemplate: "")
-        
-        return result
+        // Use BoundaryManager to safely remove all file tree sections
+        return BoundaryManager.remove(xml, type: .fileTree)
     }
 
     // Helper method to generate file tree XML with caching
@@ -472,14 +406,16 @@ actor StreamingContextEngine {
 
         add(level: 0, items: components)
 
-        var treeXML = "  <fileTree>\n"
+        var treeContent = "  <fileTree>\n"
         for line in tree {
-            treeXML.append("    \(line)\n")
+            treeContent.append("    \(line)\n")
         }
-        treeXML.append("  </fileTree>\n")
+        treeContent.append("  </fileTree>\n")
 
-        logDebug("Final file tree", details: "tree.count: \(tree.count), treeXML.count: \(treeXML.count)")
-        return treeXML
+        logDebug("Final file tree", details: "tree.count: \(tree.count), treeContent.count: \(treeContent.count)")
+        
+        // Wrap with boundary markers for safe parsing
+        return BoundaryManager.wrap(treeContent, type: .fileTree)
     }
 
     /// Clear all caches
@@ -712,20 +648,21 @@ actor StreamingContextEngine {
      } */
 
     private func generateFileXML(name: String, path: String, language: String, content: String) -> String {
-        var xml = ""
-        xml.append("  <file=\(name)>\n")
-        xml.append("  Path: \(path)\n")
-        xml.append("  `````\(language)\n")
+        var fileContent = ""
+        fileContent.append("  <file=\(name)>\n")
+        fileContent.append("  Path: \(path)\n")
+        fileContent.append("  `````\(language)\n")
 
         // Process content line by line - content should be at same indentation level as XML tags
         content.enumerateLines { line, _ in
-            xml.append("  \(line)\n")
+            fileContent.append("  \(line)\n")
         }
 
-        xml.append("  `````\n")
-        xml.append("  </file=\(name)>\n")
+        fileContent.append("  `````\n")
+        fileContent.append("  </file=\(name)>\n")
 
-        return xml
+        // Wrap with boundary markers for safe parsing
+        return BoundaryManager.wrap(fileContent, type: .file)
     }
 
     private func generateFileTree(root: URL, paths: [String]) async -> String {
@@ -786,13 +723,14 @@ actor StreamingContextEngine {
 
         add(level: 0, items: components)
 
-        var treeXML = "  <fileTree>\n"
+        var treeContent = "  <fileTree>\n"
         for line in tree {
-            treeXML.append("    \(line)\n")
+            treeContent.append("    \(line)\n")
         }
-        treeXML.append("  </fileTree>\n")
+        treeContent.append("  </fileTree>\n")
 
-        return treeXML
+        // Wrap with boundary markers for safe parsing
+        return BoundaryManager.wrap(treeContent, type: .fileTree)
     }
 
     /// Filter out build artifacts and temporary files from paths

@@ -58,10 +58,11 @@ struct PerformantTextView: NSViewRepresentable {
     func updateNSView(_ scrollView: NSScrollView, context _: Context) {
         guard let textView = scrollView.documentView as? NSTextView else { return }
 
-        // Only update if text changed to avoid unnecessary redraws
-        if textView.string != text {
+        // Clean boundaries for display and check if update needed
+        let cleanedText = BoundaryManager.cleanForDisplay(text)
+        if textView.string != cleanedText {
             // Batch all layout operations to minimize thrashing
-            textView.string = text
+            textView.string = cleanedText
             
             // Single layout pass - let AppKit handle the layout naturally
             // This is much more efficient than forcing multiple layout operations
