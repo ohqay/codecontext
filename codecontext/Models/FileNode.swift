@@ -141,6 +141,16 @@ final class FileTreeModel {
     func loadDirectory(at url: URL, ignoreRules: IgnoreRules) async {
         // Stop existing watcher if any
         stopWatching()
+        
+        // Cancel any pending selection tasks to avoid conflicts
+        selectionTask?.cancel()
+        selectionTask = nil
+
+        // Clear existing state for clean workspace switch
+        allNodes.removeAll()
+        selectedFiles.removeAll()
+        totalSelectedTokens = 0
+        await selectionManager.clearAll()
 
         // Store ignore rules for use in file change handling
         currentIgnoreRules = ignoreRules
