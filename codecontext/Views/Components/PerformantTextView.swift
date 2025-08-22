@@ -63,11 +63,11 @@ struct PerformantTextView: NSViewRepresentable {
         if textView.string != cleanedText {
             // Batch all layout operations to minimize thrashing
             textView.string = cleanedText
-            
+
             // Single layout pass - let AppKit handle the layout naturally
             // This is much more efficient than forcing multiple layout operations
             textView.invalidateIntrinsicContentSize()
-            
+
             // Schedule layout on next run loop cycle to batch with other updates
             DispatchQueue.main.async {
                 textView.sizeToFit()

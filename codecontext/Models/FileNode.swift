@@ -4,7 +4,7 @@ import Foundation
 extension Array {
     func chunked(into size: Int) -> [[Element]] {
         return stride(from: 0, to: count, by: size).map {
-            Array(self[$0 ..< Swift.min($0 + size, count)])
+            Array(self[$0..<Swift.min($0 + size, count)])
         }
     }
 }
@@ -52,7 +52,7 @@ final class FileNode: Identifiable, Hashable {
                     }
                 }
             }
-            
+
             // Then sum them up on main actor to ensure thread safety
             await MainActor.run {
                 self.aggregateTokenCount = self.children.reduce(0) { $0 + $1.aggregateTokenCount }
@@ -69,24 +69,24 @@ final class FileNode: Identifiable, Hashable {
     func getSelectedFiles() async -> [FileNode] {
         return await withTaskGroup(of: [FileNode].self) { group in
             var selected: [FileNode] = []
-            
+
             // Add this file if it's selected
             if !isDirectory && isSelected {
                 selected.append(self)
             }
-            
+
             // Process children concurrently
             for child in children {
                 group.addTask {
                     await child.getSelectedFiles()
                 }
             }
-            
+
             // Collect results
             for await childSelected in group {
                 selected.append(contentsOf: childSelected)
             }
-            
+
             return selected
         }
     }
@@ -128,6 +128,7 @@ final class FileTreeModel {
     let selectionManager: SelectionManager
     private var fileSystemWatcher: FileSystemWatcher?
     private var currentIgnoreRules: IgnoreRules?
+    // Background task used only for token calculations after selection changes
     private var selectionTask: Task<Void, Never>?
 
     // Callback for file system changes
@@ -141,7 +142,7 @@ final class FileTreeModel {
     func loadDirectory(at url: URL, ignoreRules: IgnoreRules) async {
         // Stop existing watcher if any
         stopWatching()
-        
+
         // Cancel any pending selection tasks to avoid conflicts
         selectionTask?.cancel()
         selectionTask = nil
@@ -167,11 +168,13 @@ final class FileTreeModel {
         guard node.isDirectory else { return }
 
         let fileManager = FileManager.default
-        guard let contents = try? fileManager.contentsOfDirectory(
-            at: node.url,
-            includingPropertiesForKeys: [.isDirectoryKey, .fileSizeKey],
-            options: [.skipsHiddenFiles]
-        ) else { return }
+        guard
+            let contents = try? fileManager.contentsOfDirectory(
+                at: node.url,
+                includingPropertiesForKeys: [.isDirectoryKey, .fileSizeKey],
+                options: [.skipsHiddenFiles]
+            )
+        else { return }
 
         for itemURL in contents {
             // Check if ignored
@@ -179,7 +182,8 @@ final class FileTreeModel {
                 continue
             }
 
-            let isDir = (try? itemURL.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
+            let isDir =
+                (try? itemURL.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
             let childNode = FileNode(url: itemURL, isDirectory: isDir, parent: node)
             node.children.append(childNode)
             allNodes.append(childNode)
@@ -247,61 +251,49 @@ final class FileTreeModel {
         }
     }
 
-    func updateSelection(_ node: FileNode) {
-        // Cancel any existing selection task
-        selectionTask?.cancel()
-
-        // Collect affected paths on main thread first
+    func updateSelection(_ node: FileNode) async {
+        print("[DEBUG] FileTreeModel: Updating selection for node \(node.url.path)")
         let nodePath = node.url.path
         let (affectedPaths, affectedFiles) = collectAffectedPathsAndFiles(node: node)
 
-        // Cancel any existing selection task to prevent conflicts
+        print(
+            "[DEBUG] FileTreeModel: Affected paths: \(affectedPaths.count), files: \(affectedFiles.count)"
+        )
+
+        let update = await selectionManager.toggleSelection(
+            for: nodePath,
+            affectedPaths: affectedPaths,
+            affectedFiles: affectedFiles
+        )
+
+        await MainActor.run {
+            applySelectionUpdate(update, to: node)
+        }
+
+        // Kick off background token recomputation for currently selected files
+        // Cancel any in-flight token calculation to avoid redundant work
         selectionTask?.cancel()
+        guard !affectedFiles.isEmpty else { return }
 
-        // Handle selection asynchronously
         selectionTask = Task {
-            // Check for cancellation before heavy work
-            if Task.isCancelled { return }
-
-            // Update selection state off main thread
-            let update = await selectionManager.toggleSelection(
-                for: nodePath,
-                affectedPaths: affectedPaths,
-                affectedFiles: affectedFiles
+            // Snapshot current selected files
+            let (_, selectedFiles, _) = await selectionManager.getSelectionState()
+            await selectionManager.updateTokenCounts(
+                for: selectedFiles,
+                tokenProcessor: tokenProcessor
             )
 
-            // Check for cancellation before UI updates
-            if Task.isCancelled { return }
-
-            // Apply UI updates in batch on main thread
+            // Update total token count on UI
+            let (_, _, tokens) = await selectionManager.getSelectionState()
             await MainActor.run {
-                applySelectionUpdate(update, to: node)
-            }
-
-            // Calculate tokens in background (only for files)
-            if !affectedFiles.isEmpty {
-                // Check for cancellation before expensive token calculation
-                if Task.isCancelled { return }
-
-                let (_, selectedFiles, _) = await selectionManager.getSelectionState()
-                await selectionManager.updateTokenCounts(
-                    for: selectedFiles,
-                    tokenProcessor: tokenProcessor
-                )
-
-                // Check for cancellation before final UI update
-                if Task.isCancelled { return }
-
-                // Update token count on UI
-                let (_, _, tokens) = await selectionManager.getSelectionState()
-                await MainActor.run {
-                    self.totalSelectedTokens = tokens
-                }
+                self.totalSelectedTokens = tokens
             }
         }
     }
 
-    private func collectAffectedPathsAndFiles(node: FileNode) -> (paths: Set<String>, files: Set<String>) {
+    private func collectAffectedPathsAndFiles(node: FileNode) -> (
+        paths: Set<String>, files: Set<String>
+    ) {
         var paths = Set<String>()
         var files = Set<String>()
         var nodeCount = 0
@@ -363,8 +355,8 @@ final class FileTreeModel {
     // Restore selections from saved JSON data
     func restoreSelections(from selectionJSON: String) {
         guard !selectionJSON.isEmpty,
-              let jsonData = selectionJSON.data(using: .utf8),
-              let savedPaths = try? JSONDecoder().decode(Set<String>.self, from: jsonData)
+            let jsonData = selectionJSON.data(using: .utf8),
+            let savedPaths = try? JSONDecoder().decode(Set<String>.self, from: jsonData)
         else {
             return
         }
@@ -389,9 +381,10 @@ final class FileTreeModel {
         guard let rootURL = rootNode?.url else { return }
 
         // Save current selections before refreshing
-        let currentSelections = Set(allNodes.compactMap { node in
-            node.isSelected && !node.isDirectory ? node.url.path : nil
-        })
+        let currentSelections = Set(
+            allNodes.compactMap { node in
+                node.isSelected && !node.isDirectory ? node.url.path : nil
+            })
 
         // Clear existing data
         allNodes.removeAll()
@@ -439,7 +432,8 @@ final class FileTreeModel {
 
     private func handleFileSystemChanges(_ changes: [FileSystemWatcher.FileChange]) async {
         guard let rootURL = rootNode?.url,
-              let ignoreRules = currentIgnoreRules else { return }
+            let ignoreRules = currentIgnoreRules
+        else { return }
 
         // Throttle file system changes to avoid excessive updates
         guard changes.count < AppConfiguration.maxFileSystemChanges else {
@@ -450,9 +444,10 @@ final class FileTreeModel {
         print("Detected \(changes.count) file system change(s)")
 
         // Save current selections before updating
-        let currentSelections = Set(allNodes.compactMap { node in
-            node.isSelected && !node.isDirectory ? node.url.path : nil
-        })
+        let currentSelections = Set(
+            allNodes.compactMap { node in
+                node.isSelected && !node.isDirectory ? node.url.path : nil
+            })
 
         var needsFullRefresh = false
         var modifiedFiles: [URL] = []
@@ -472,7 +467,8 @@ final class FileTreeModel {
 
         if needsFullRefresh {
             // Perform a full refresh for structural changes
-            await performFullRefresh(rootURL: rootURL, ignoreRules: ignoreRules, preservedSelections: currentSelections)
+            await performFullRefresh(
+                rootURL: rootURL, ignoreRules: ignoreRules, preservedSelections: currentSelections)
         } else if !modifiedFiles.isEmpty {
             // Perform incremental updates for file modifications only
             await performIncrementalUpdate(modifiedFiles: modifiedFiles)
@@ -482,7 +478,9 @@ final class FileTreeModel {
         onFileSystemChange?()
     }
 
-    private func performFullRefresh(rootURL: URL, ignoreRules: IgnoreRules, preservedSelections: Set<String>) async {
+    private func performFullRefresh(
+        rootURL: URL, ignoreRules: IgnoreRules, preservedSelections: Set<String>
+    ) async {
         // Clear existing data
         allNodes.removeAll()
         rootNode = nil
@@ -522,7 +520,9 @@ final class FileTreeModel {
                             node.tokenCount = result.tokenCount
 
                             if oldTokenCount != result.tokenCount {
-                                print("Updated token count for \(node.name): \(oldTokenCount) -> \(result.tokenCount)")
+                                print(
+                                    "Updated token count for \(node.name): \(oldTokenCount) -> \(result.tokenCount)"
+                                )
                                 // Update aggregate counts up the tree asynchronously
                                 if let parent = node.parent {
                                     Task {
@@ -537,8 +537,8 @@ final class FileTreeModel {
 
             await MainActor.run {
                 Task {
-            await updateTotalSelectedTokens()
-        }
+                    await updateTotalSelectedTokens()
+                }
                 // Make sure the tokens column updates for visible rows
                 NotificationCenter.default.post(name: .outlineViewNeedsRefresh, object: nil)
             }

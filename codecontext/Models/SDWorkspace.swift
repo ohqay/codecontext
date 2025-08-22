@@ -38,7 +38,7 @@ final class SDWorkspace {
     var selectionJSON: String
 
     // User instructions/prompt for this workspace
-    var userInstructions: String
+    var userInstructions: String?
 
     // Last opened date for recents ordering
     var lastOpenedAt: Date
@@ -61,7 +61,7 @@ final class SDWorkspace {
         excludeDerivedData: Bool = true,
         customIgnore: String = "",
         selectionJSON: String = "{}",
-        userInstructions: String = "",
+        userInstructions: String? = "",
         lastOpenedAt: Date = .now
     ) {
         self.id = id.isEmpty ? UUID().uuidString : id

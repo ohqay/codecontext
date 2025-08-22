@@ -152,7 +152,7 @@ extension FileTreeView {
         @objc private func handleOutlineViewRefresh() {
             DispatchQueue.main.async { [weak self] in
                 guard let self, let outlineView = self.outlineView else { return }
-                
+
                 // Update aggregate tokens asynchronously
                 if let rootNode = self.parent.fileTreeModel.rootNode {
                     Task {
@@ -184,53 +184,53 @@ extension FileTreeView {
                 }
             }
         }
-        
+
         private func getChangedSelectionNodes() -> [FileNode] {
             // For selection updates, only refresh currently visible rows
             // This is much more efficient than recursive traversal
             guard let outlineView = outlineView else { return [] }
-            
+
             var changedNodes: [FileNode] = []
             let visibleRange = outlineView.visibleRect
             let visibleRows = outlineView.rows(in: visibleRange)
-            
-            for row in visibleRows.lowerBound..<visibleRows.upperBound {
+
+            for row in visibleRows.lowerBound ..< visibleRows.upperBound {
                 if let node = outlineView.item(atRow: row) as? FileNode {
                     changedNodes.append(node)
                 }
             }
-            
+
             return changedNodes
         }
 
         func refreshTokenCounts(in outlineView: NSOutlineView) {
             // Batch update token counts for better performance
             let nodesToUpdate = getNodesRequiringTokenUpdate()
-            
+
             for node in nodesToUpdate {
                 let row = outlineView.row(forItem: node)
                 guard row >= 0 else { continue }
                 updateTokenCountForRow(row, node: node, outlineView: outlineView)
             }
         }
-        
+
         private func getNodesRequiringTokenUpdate() -> [FileNode] {
             // Only update currently visible rows for optimal performance
             guard let outlineView = outlineView else { return [] }
-            
+
             var nodesToUpdate: [FileNode] = []
             let visibleRange = outlineView.visibleRect
             let visibleRows = outlineView.rows(in: visibleRange)
-            
-            for row in visibleRows.lowerBound..<visibleRows.upperBound {
+
+            for row in visibleRows.lowerBound ..< visibleRows.upperBound {
                 if let node = outlineView.item(atRow: row) as? FileNode {
                     nodesToUpdate.append(node)
                 }
             }
-            
+
             return nodesToUpdate
         }
-        
+
         private func updateTokenCountForRow(_ row: Int, node: FileNode, outlineView: NSOutlineView) {
             guard let tokenView = outlineView.view(atColumn: 1, row: row, makeIfNecessary: false),
                   let label = tokenView.subviews.first as? NSTextField
