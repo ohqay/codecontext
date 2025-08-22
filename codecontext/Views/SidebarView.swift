@@ -123,6 +123,11 @@ private struct FiltersMenu: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             // Section 0: Respect rules
+            Text("Respect Rules")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.top, 4)
+            
             ForEach(filterConfigs.filter { $0.section == 0 }, id: \.title) { config in
                 FilterToggle(
                     title: config.title,
@@ -135,6 +140,11 @@ private struct FiltersMenu: View {
             Divider()
 
             // Section 1: Exclude rules
+            Text("Exclude Patterns")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.top, 4)
+            
             ForEach(filterConfigs.filter { $0.section == 1 }, id: \.title) { config in
                 FilterToggle(
                     title: config.title,
