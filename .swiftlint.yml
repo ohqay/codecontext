@@ -1,0 +1,24 @@
+included:
+  - codecontext
+  - codecontextTests
+  - codecontextUITests
+
+excluded:
+  - .build
+  - TokenizerFFI
+  - codecontext.xcodeproj
+  - codecontext/Assets.xcassets
+  - codecontext/Resources
+
+disabled_rules:
+  # Keep signal focused on actionable issues in this project
+  - line_length
+  - file_length
+  - type_body_length
+  - function_body_length
+  - cyclomatic_complexity
+  - identifier_name
+  - type_name
+  - todo
+
+reporter: "xcode"
