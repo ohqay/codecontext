@@ -11,6 +11,7 @@ import SwiftUI
 @main
 struct codecontextApp: App {
     @State private var notificationSystem = NotificationSystem()
+    @State private var toastManager = ToastManager()
     @State private var tokenizerInitialized = false
 
     init() {
@@ -41,6 +42,7 @@ struct codecontextApp: App {
         WindowGroup(id: "main") {
             ContentView()
                 .environment(notificationSystem)
+                .environment(toastManager)
                 .frame(minWidth: 900, minHeight: 600)
         }
         .defaultSize(width: 1200, height: 800)

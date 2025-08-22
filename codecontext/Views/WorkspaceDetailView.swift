@@ -11,6 +11,7 @@ struct WorkspaceDetailView: View {
 
     @Environment(\.modelContext) private var modelContext
     @Environment(NotificationSystem.self) private var notificationSystem
+    @Environment(ToastManager.self) private var toastManager
     @State private var output: String = ""
     @State private var totalTokens: Int = 0
     @State private var streamingEngine: StreamingContextEngine?
@@ -28,7 +29,7 @@ struct WorkspaceDetailView: View {
                 DetailSection(topSectionTitle: "Instructions") {
                     UserInstructionsEditor(
                         text: Binding(
-                            get: { workspace.userInstructions },
+                            get: { workspace.userInstructions ?? "" },
                             set: { workspace.userInstructions = $0 }
                         )
                     )
@@ -56,6 +57,7 @@ struct WorkspaceDetailView: View {
         .apply(
             OutputNotificationHandlers(
                 output: output,
+                toastManager: toastManager,
                 onRefresh: { await regenerateOutput() }
             )
         )
@@ -83,10 +85,20 @@ struct WorkspaceDetailView: View {
                 loadAllFiles: loadAllFiles,
                 regenerateOutput: regenerateOutput,
                 scheduleRegeneration: scheduleRegeneration
-            ))
+            )
+        )
+        .onDisappear {
+            print("[DEBUG] WorkspaceDetailView: View disappearing for workspace \(workspace.id)")
+            if let url = WorkspaceLoader.resolveURL(from: workspace, start: false) {
+                url.stopAccessingSecurityScopedResource()
+                print("[DEBUG] WorkspaceDetailView: Stopped accessing \(url.path)")
+            }
+        }
     }
 
     private func regenerateOutput() async {
+        print(
+            "[DEBUG] WorkspaceDetailView: Starting regenerateOutput for workspace \(workspace.id)")
         let startTime = Date()
 
         // Get selected paths from workspace
@@ -97,6 +109,13 @@ struct WorkspaceDetailView: View {
             selectedPaths = paths
         } else {
             selectedPaths = []
+        }
+
+        // Ensure we have the file list ready before attempting incremental updates
+        // This avoids a race after switching workspaces where selections arrive
+        // before loadAllFiles() completes, leading to no files being added.
+        if !selectedPaths.isEmpty && allFiles.isEmpty {
+            await loadAllFiles()
         }
 
         // Generate codebase with file tree even if no files selected
@@ -112,7 +131,9 @@ struct WorkspaceDetailView: View {
             }
 
             do {
-                print("[DEBUG] File tree generation - allFiles.count: \(allFiles.count), includeFileTree: \(includeFileTree)")
+                print(
+                    "[DEBUG] File tree generation - allFiles.count: \(allFiles.count), includeFileTree: \(includeFileTree)"
+                )
                 let result = try await engine.updateContext(
                     currentXML: "<codebase>\n</codebase>\n",
                     addedPaths: [],
@@ -120,7 +141,7 @@ struct WorkspaceDetailView: View {
                     allFiles: allFiles,
                     includeTree: includeFileTree,
                     rootURL: rootURL,
-                    userInstructions: includeInstructions ? workspace.userInstructions : ""
+                    userInstructions: includeInstructions ? (workspace.userInstructions ?? "") : ""
                 )
 
                 output = result.xml
@@ -130,10 +151,14 @@ struct WorkspaceDetailView: View {
                 previousSelectedPaths = []
 
                 let duration = Date().timeIntervalSince(startTime)
-                print("[Generation Complete - Empty with Tree] Time: \(String(format: "%.3fs", duration))")
+                print(
+                    "[Generation Complete - Empty with Tree] Time: \(String(format: "%.3fs", duration))"
+                )
             } catch {
                 let duration = Date().timeIntervalSince(startTime)
-                print("[Generation Failed] Error after \(String(format: "%.3fs", duration)): \(error)")
+                print(
+                    "[Generation Failed] Error after \(String(format: "%.3fs", duration)): \(error)"
+                )
                 output = "Error generating context: \(error.localizedDescription)"
             }
             return
@@ -156,15 +181,22 @@ struct WorkspaceDetailView: View {
             let removedPaths = previousSelectedPaths.subtracting(selectedPaths)
 
             // Always use incremental updates - even first generation is just adding all files to empty context
-            let currentXML = lastGeneratedXML.isEmpty ? "<codebase>\n</codebase>\n" : lastGeneratedXML
+            let currentXML =
+                lastGeneratedXML.isEmpty ? "<codebase>\n</codebase>\n" : lastGeneratedXML
 
             print("[Incremental Update] Added: \(addedPaths.count), Removed: \(removedPaths.count)")
-            print("[DEBUG] File tree generation with files - allFiles.count: \(allFiles.count), includeFileTree: \(includeFileTree)")
+            print(
+                "[DEBUG] File tree generation with files - allFiles.count: \(allFiles.count), includeFileTree: \(includeFileTree)"
+            )
             if !addedPaths.isEmpty {
-                print("  - Adding paths: \(Array(addedPaths).prefix(5))\(addedPaths.count > 5 ? "..." : "")")
+                print(
+                    "  - Adding paths: \(Array(addedPaths).prefix(5))\(addedPaths.count > 5 ? "..." : "")"
+                )
             }
             if !removedPaths.isEmpty {
-                print("  - Removing paths: \(Array(removedPaths).prefix(5))\(removedPaths.count > 5 ? "..." : "")")
+                print(
+                    "  - Removing paths: \(Array(removedPaths).prefix(5))\(removedPaths.count > 5 ? "..." : "")"
+                )
             }
 
             let result = try await engine.updateContext(
@@ -174,7 +206,7 @@ struct WorkspaceDetailView: View {
                 allFiles: allFiles,
                 includeTree: includeFileTree,
                 rootURL: rootURL,
-                userInstructions: includeInstructions ? workspace.userInstructions : ""
+                userInstructions: includeInstructions ? (workspace.userInstructions ?? "") : ""
             )
 
             output = result.xml
@@ -184,17 +216,25 @@ struct WorkspaceDetailView: View {
             previousSelectedPaths = selectedPaths
 
             let totalDuration = Date().timeIntervalSince(startTime)
-            print("[Incremental Update Complete] Duration: \(String(format: "%.3fs", totalDuration))")
-            print("  - Files processed: \(result.filesProcessed), Total tokens: \(result.tokenCount)")
+            print(
+                "[Incremental Update Complete] Duration: \(String(format: "%.3fs", totalDuration))")
+            print(
+                "  - Files processed: \(result.filesProcessed), Total tokens: \(result.tokenCount)")
 
             if totalDuration - result.generationTime > 0.5 {
-                print("  - Overhead time: \(String(format: "%.3fs", totalDuration - result.generationTime)) (includes file loading, UI updates)")
+                print(
+                    "  - Overhead time: \(String(format: "%.3fs", totalDuration - result.generationTime)) (includes file loading, UI updates)"
+                )
             }
         } catch {
             let duration = Date().timeIntervalSince(startTime)
             print("[Generation Failed] Error after \(String(format: "%.3fs", duration)): \(error)")
             output = "Error generating context: \(error.localizedDescription)"
         }
+        let totalDuration = Date().timeIntervalSince(startTime)
+        print(
+            "[DEBUG] WorkspaceDetailView: regenerateOutput completed in \(String(format: "%.3fs", totalDuration)) for workspace \(workspace.id)"
+        )
     }
 
     private func persistFileTreePreference() {
@@ -204,7 +244,7 @@ struct WorkspaceDetailView: View {
             try? modelContext.save()
         }
     }
-    
+
     private func updateSelectedFileCount() {
         if let data = workspace.selectionJSON.data(using: .utf8),
            let paths = try? JSONDecoder().decode(Set<String>.self, from: data)
@@ -234,7 +274,10 @@ struct WorkspaceDetailView: View {
     private func resolveURL(from workspace: SDWorkspace) -> URL? {
         var isStale = false
         do {
-            let url = try URL(resolvingBookmarkData: workspace.bookmark, options: [.withSecurityScope], relativeTo: nil, bookmarkDataIsStale: &isStale)
+            let url = try URL(
+                resolvingBookmarkData: workspace.bookmark, options: [.withSecurityScope],
+                relativeTo: nil, bookmarkDataIsStale: &isStale
+            )
             return url
         } catch {
             return nil
@@ -280,8 +323,8 @@ private struct OutputHeader: View {
 
     var body: some View {
         HStack {
-            Toggle("Include file tree", isOn: $includeFileTree)
-            Toggle("Include instructions", isOn: $includeInstructions)
+            Toggle("File tree", isOn: $includeFileTree)
+            Toggle("Instructions", isOn: $includeInstructions)
 
             Spacer()
 
@@ -320,6 +363,7 @@ private struct OutputPreview: View {
 
 private struct OutputNotificationHandlers: ViewModifier {
     let output: String
+    let toastManager: ToastManager
     let onRefresh: () async -> Void
 
     func body(content: Content) -> some View {
@@ -329,6 +373,9 @@ private struct OutputNotificationHandlers: ViewModifier {
                 // Clean boundaries before copying to clipboard
                 let cleanedOutput = BoundaryManager.cleanForDisplay(output)
                 NSPasteboard.general.setString(cleanedOutput, forType: .string)
+                
+                // Show toast feedback
+                toastManager.showSuccess("Context copied")
             }
             .onReceive(NotificationCenter.default.publisher(for: .requestRefresh)) { _ in
                 Task { await onRefresh() }
