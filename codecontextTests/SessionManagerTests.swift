@@ -3,24 +3,7 @@ import SwiftData
 import XCTest
 
 @MainActor
-final class SessionManagerTests: XCTestCase {
-    private var modelContext: ModelContext!
-    private var container: ModelContainer!
-
-    override func setUp() async throws {
-        let schema = Schema([
-            SDWorkspace.self,
-            SDPreference.self,
-        ])
-        let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
-        container = try ModelContainer(for: schema, configurations: [config])
-        modelContext = ModelContext(container)
-    }
-
-    override func tearDown() async throws {
-        modelContext = nil
-        container = nil
-    }
+final class SessionManagerTests: SwiftDataTestCase {
 
     func testSessionRestorationEnabled() throws {
         let sessionManager = SessionManager.shared

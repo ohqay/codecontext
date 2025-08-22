@@ -1,9 +1,9 @@
 @testable import codecontext
-import XCTest
+import Testing
 
 @MainActor
-final class IgnoreRulesTests: XCTestCase {
-    func testProjectPbxprojShouldNotBeIgnored() {
+struct IgnoreRulesTests {
+    @Test func projectPbxprojShouldNotBeIgnored() {
         let rules = IgnoreRules(
             respectGitIgnore: false,
             respectDotIgnore: false,
@@ -24,10 +24,10 @@ final class IgnoreRulesTests: XCTestCase {
         let pbxprojPath = "/Users/test/project/MyApp.xcodeproj/project.pbxproj"
         let isIgnored = rules.isIgnored(path: pbxprojPath, isDirectory: false)
 
-        XCTAssertFalse(isIgnored, "project.pbxproj files should not be ignored")
+        #expect(!isIgnored, "project.pbxproj files should not be ignored")
     }
 
-    func testXcworkspaceFilesShouldBeIgnored() {
+    @Test func xcworkspaceFilesShouldBeIgnored() {
         let rules = IgnoreRules(
             respectGitIgnore: false,
             respectDotIgnore: false,
@@ -48,10 +48,10 @@ final class IgnoreRulesTests: XCTestCase {
         let xcworkspacePath = "/Users/test/project/MyApp.xcworkspace"
         let isIgnored = rules.isIgnored(path: xcworkspacePath, isDirectory: true)
 
-        XCTAssertTrue(isIgnored, ".xcworkspace files should be ignored when in custom patterns")
+        #expect(isIgnored, ".xcworkspace files should be ignored when in custom patterns")
     }
 
-    func testWildcardPatternMatching() {
+    @Test func wildcardPatternMatching() {
         let rules = IgnoreRules(
             respectGitIgnore: false,
             respectDotIgnore: false,
@@ -61,19 +61,19 @@ final class IgnoreRulesTests: XCTestCase {
         )
 
         // Test extension patterns
-        XCTAssertTrue(rules.isIgnored(path: "/Users/test/project/debug.log", isDirectory: false))
-        XCTAssertFalse(rules.isIgnored(path: "/Users/test/project/debug.txt", isDirectory: false))
+        #expect(rules.isIgnored(path: "/Users/test/project/debug.log", isDirectory: false))
+        #expect(!rules.isIgnored(path: "/Users/test/project/debug.txt", isDirectory: false))
 
         // Test prefix patterns
-        XCTAssertTrue(rules.isIgnored(path: "/Users/test/project/tempfile.txt", isDirectory: false))
-        XCTAssertFalse(rules.isIgnored(path: "/Users/test/project/mytempfile.txt", isDirectory: false))
+        #expect(rules.isIgnored(path: "/Users/test/project/tempfile.txt", isDirectory: false))
+        #expect(!rules.isIgnored(path: "/Users/test/project/mytempfile.txt", isDirectory: false))
 
         // Test contains patterns
-        XCTAssertTrue(rules.isIgnored(path: "/Users/test/project/mycache", isDirectory: true))
-        XCTAssertTrue(rules.isIgnored(path: "/Users/test/project/cache.tmp", isDirectory: false))
+        #expect(rules.isIgnored(path: "/Users/test/project/mycache", isDirectory: true))
+        #expect(rules.isIgnored(path: "/Users/test/project/cache.tmp", isDirectory: false))
     }
 
-    func testBuildArtifactExclusions() {
+    @Test func buildArtifactExclusions() {
         let rules = IgnoreRules(
             respectGitIgnore: false,
             respectDotIgnore: false,
@@ -91,18 +91,18 @@ final class IgnoreRulesTests: XCTestCase {
         )
 
         // Test that build artifacts are ignored
-        XCTAssertTrue(rules.isIgnored(path: "/Users/test/project/node_modules", isDirectory: true))
-        XCTAssertTrue(rules.isIgnored(path: "/Users/test/project/DerivedData", isDirectory: true))
-        XCTAssertTrue(rules.isIgnored(path: "/Users/test/project/build", isDirectory: true))
-        XCTAssertTrue(rules.isIgnored(path: "/Users/test/project/.DS_Store", isDirectory: false))
+        #expect(rules.isIgnored(path: "/Users/test/project/node_modules", isDirectory: true))
+        #expect(rules.isIgnored(path: "/Users/test/project/DerivedData", isDirectory: true))
+        #expect(rules.isIgnored(path: "/Users/test/project/build", isDirectory: true))
+        #expect(rules.isIgnored(path: "/Users/test/project/.DS_Store", isDirectory: false))
 
         // Test that legitimate files are NOT ignored
-        XCTAssertFalse(rules.isIgnored(path: "/Users/test/project/src/main.swift", isDirectory: false))
-        XCTAssertFalse(rules.isIgnored(path: "/Users/test/project/README.md", isDirectory: false))
-        XCTAssertFalse(rules.isIgnored(path: "/Users/test/project/MyApp.xcodeproj/project.pbxproj", isDirectory: false))
+        #expect(!rules.isIgnored(path: "/Users/test/project/src/main.swift", isDirectory: false))
+        #expect(!rules.isIgnored(path: "/Users/test/project/README.md", isDirectory: false))
+        #expect(!rules.isIgnored(path: "/Users/test/project/MyApp.xcodeproj/project.pbxproj", isDirectory: false))
     }
 
-    func testXcodeProjectFilesAreNotExcluded() {
+    @Test func xcodeProjectFilesAreNotExcluded() {
         let rules = IgnoreRules(
             respectGitIgnore: false,
             respectDotIgnore: false,
@@ -130,11 +130,11 @@ final class IgnoreRulesTests: XCTestCase {
 
         for testPath in testCases {
             let isIgnored = rules.isIgnored(path: testPath, isDirectory: false)
-            XCTAssertFalse(isIgnored, "\(testPath) should not be ignored as it's a project configuration file")
+            #expect(!isIgnored, "\(testPath) should not be ignored as it's a project configuration file")
         }
     }
 
-    func testUserDataShouldBeIgnored() {
+    @Test func userDataShouldBeIgnored() {
         let rules = IgnoreRules(
             respectGitIgnore: false,
             respectDotIgnore: false,
@@ -159,7 +159,7 @@ final class IgnoreRulesTests: XCTestCase {
 
         for testPath in testCases {
             let isIgnored = rules.isIgnored(path: testPath, isDirectory: true)
-            XCTAssertTrue(isIgnored, "\(testPath) should be ignored as it's user-specific data")
+            #expect(isIgnored, "\(testPath) should be ignored as it's user-specific data")
         }
     }
 }

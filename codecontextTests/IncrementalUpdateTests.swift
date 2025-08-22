@@ -220,11 +220,6 @@ final class IncrementalUpdateTests: XCTestCase {
                 rootURL: testDir
             )
 
-            // Debug output to understand what's generated
-            print("=== Generated XML ===")
-            print(result.xml)
-            print("=== End XML ===")
-
             // Content should only include selected file
             XCTAssertTrue(result.xml.contains("<file=main.swift>"), "Should contain main.swift file block")
             XCTAssertTrue(result.xml.contains("Hello World"), "Should contain main.swift content")
@@ -243,10 +238,6 @@ final class IncrementalUpdateTests: XCTestCase {
                 let startIndex = treeStart.upperBound
                 let endIndex = treeEnd.lowerBound
                 let fileTreeContent = String(result.xml[startIndex ..< endIndex])
-
-                print("=== File Tree Content ===")
-                print(fileTreeContent)
-                print("=== End File Tree ===")
 
                 XCTAssertTrue(fileTreeContent.contains("main.swift"), "File tree should contain main.swift")
                 XCTAssertTrue(fileTreeContent.contains("helper.swift"), "File tree should contain helper.swift")
@@ -491,8 +482,6 @@ final class IncrementalUpdateTests: XCTestCase {
                 rootURL: testDir
             )
 
-            print("=== Step 1: Select Folder A ===")
-            print("Token count: \(result1.tokenCount)")
             XCTAssertTrue(result1.xml.contains("src/components/Button.tsx"), "Step 1: Should contain Button")
             XCTAssertTrue(result1.xml.contains("src/components/Input.tsx"), "Step 1: Should contain Input")
             XCTAssertFalse(result1.xml.contains("src/utils/helper.ts"), "Step 1: Should not contain helper")
@@ -510,8 +499,6 @@ final class IncrementalUpdateTests: XCTestCase {
                 rootURL: testDir
             )
 
-            print("=== Step 2: Select Folder B ===")
-            print("Token count: \(result2.tokenCount)")
             XCTAssertTrue(result2.xml.contains("src/components/Button.tsx"), "Step 2: Should still contain Button")
             XCTAssertTrue(result2.xml.contains("src/components/Input.tsx"), "Step 2: Should still contain Input")
             XCTAssertTrue(result2.xml.contains("src/utils/helper.ts"), "Step 2: Should now contain helper")
@@ -529,8 +516,6 @@ final class IncrementalUpdateTests: XCTestCase {
                 rootURL: testDir
             )
 
-            print("=== Step 3: Deselect Folder B ===")
-            print("Token count: \(result3.tokenCount)")
             XCTAssertTrue(result3.xml.contains("src/components/Button.tsx"), "Step 3: Should still contain Button")
             XCTAssertTrue(result3.xml.contains("src/components/Input.tsx"), "Step 3: Should still contain Input")
             XCTAssertFalse(result3.xml.contains("src/utils/helper.ts"), "Step 3: Should NO LONGER contain helper")
@@ -538,8 +523,7 @@ final class IncrementalUpdateTests: XCTestCase {
 
             // Critical test: token count should return to step 1 level
             let step3TokenCount = result3.tokenCount
-            print("Step 1 tokens: \(step1TokenCount), Step 3 tokens: \(step3TokenCount)")
-            XCTAssertEqual(step3TokenCount, step1TokenCount, "Step 3: Token count should return to step 1 level (folder B files removed)")
+            XCTAssertEqual(step3TokenCount, step1TokenCount, "Step 3: Token count should return to step 1 level")
 
             // Step 4: Re-select folder B - should return to step 2 state
             let result4 = try await engine.updateContext(
@@ -551,8 +535,6 @@ final class IncrementalUpdateTests: XCTestCase {
                 rootURL: testDir
             )
 
-            print("=== Step 4: Re-select Folder B ===")
-            print("Token count: \(result4.tokenCount)")
             XCTAssertTrue(result4.xml.contains("src/components/Button.tsx"), "Step 4: Should contain Button")
             XCTAssertTrue(result4.xml.contains("src/components/Input.tsx"), "Step 4: Should contain Input")
             XCTAssertTrue(result4.xml.contains("src/utils/helper.ts"), "Step 4: Should contain helper again")
