@@ -7,41 +7,46 @@ final class DataController {
 
     let container: ModelContainer
 
-    private init(inMemory: Bool = false) {
-        let schema = Schema([
-            SDWorkspace.self,
-            SDPreference.self,
-        ])
-
+    init() {
         do {
-            // Try to create container with automatic migration
-            let config = ModelConfiguration(
-                schema: schema,
-                isStoredInMemoryOnly: inMemory,
-                allowsSave: true,
-                groupContainer: .none,
-                cloudKitDatabase: .none
+            container = try ModelContainer(
+                for: SDWorkspace.self, SDPreference.self,
+                configurations: ModelConfiguration("default", isStoredInMemoryOnly: false)
             )
-            container = try ModelContainer(for: schema, configurations: [config])
             print("[DataController] Successfully created ModelContainer")
-        } catch {
-            print("[DataController] Failed to create ModelContainer with error: \(error)")
-
-            // If migration fails, try creating a fresh container (this will lose existing data)
-            // In a production app, you'd want more sophisticated migration handling
-            do {
-                let freshConfig = ModelConfiguration(
-                    schema: schema,
-                    isStoredInMemoryOnly: true, // Force in-memory to avoid conflicts
-                    allowsSave: true,
-                    groupContainer: .none,
-                    cloudKitDatabase: .none
+        } catch let containerError as NSError {
+            if containerError.code == 134110 {  // Migration error code
+                print("[DataController] Migration failed with error: \(containerError)")
+                // Attempt to delete the existing store and recreate
+                let storeURL = ModelConfiguration("default", isStoredInMemoryOnly: false).url
+                do {
+                    try FileManager.default.removeItem(at: storeURL)
+                    print("[DataController] Deleted existing store at \(storeURL.path)")
+                    container = try ModelContainer(
+                        for: SDWorkspace.self, SDPreference.self,
+                        configurations: ModelConfiguration(
+                            "default", isStoredInMemoryOnly: false)
+                    )
+                    print(
+                        "[DataController] Successfully recreated ModelContainer after deleting old store"
+                    )
+                } catch {
+                    print("[DataController] Failed to delete and recreate store: \(error)")
+                    container = try! ModelContainer(
+                        for: SDWorkspace.self, SDPreference.self,
+                        configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+                    )
+                    print("[DataController] Created fallback in-memory container")
+                }
+            } else {
+                print(
+                    "[DataController] Failed to create ModelContainer with error: \(containerError)"
                 )
-                container = try ModelContainer(for: schema, configurations: [freshConfig])
+                container = try! ModelContainer(
+                    for: SDWorkspace.self, SDPreference.self,
+                    configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+                )
                 print("[DataController] Created fallback in-memory container")
-            } catch {
-                // Last resort: fatal error
-                fatalError("Failed to create fallback ModelContainer: \(error)")
             }
         }
 

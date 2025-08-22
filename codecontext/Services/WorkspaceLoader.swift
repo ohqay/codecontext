@@ -5,7 +5,9 @@ import SwiftData
 @MainActor
 final class WorkspaceLoader {
     /// Resolve a workspace URL from bookmark data
-    static func resolveURL(from workspace: SDWorkspace) -> URL? {
+    static func resolveURL(from workspace: SDWorkspace, start: Bool = true) -> URL? {
+        print(
+            "[DEBUG] WorkspaceLoader: Resolving URL for workspace \(workspace.id), start: \(start)")
         var isStale = false
         do {
             let url = try URL(
@@ -14,9 +16,16 @@ final class WorkspaceLoader {
                 relativeTo: nil,
                 bookmarkDataIsStale: &isStale
             )
-            _ = url.startAccessingSecurityScopedResource()
+            if start {
+                let success = url.startAccessingSecurityScopedResource()
+                print("[DEBUG] WorkspaceLoader: Started accessing \(url.path), success: \(success)")
+            } else {
+                url.stopAccessingSecurityScopedResource()
+                print("[DEBUG] WorkspaceLoader: Stopped accessing \(url.path)")
+            }
             return url
         } catch {
+            print("[DEBUG] WorkspaceLoader: Error resolving URL: \(error.localizedDescription)")
             return nil
         }
     }
@@ -46,12 +55,15 @@ final class WorkspaceLoader {
         fileTreeModel: FileTreeModel,
         isRefresh: Bool
     ) async -> Int {
+        print(
+            "[DEBUG] WorkspaceLoader: Performing operation for workspace \(workspace.id), isRefresh: \(isRefresh)"
+        )
         guard let url = resolveURL(from: workspace) else {
-            print("WorkspaceLoader: Failed to resolve URL for workspace: \(workspace.name)")
+            print("[DEBUG] WorkspaceLoader: Failed to resolve URL for workspace \(workspace.id)")
             return 0
         }
 
-        print("WorkspaceLoader: Loading workspace at \(url.path), isRefresh: \(isRefresh)")
+        print("[DEBUG] WorkspaceLoader: Resolved URL: \(url.path)")
         let ignoreRules = buildIgnoreRules(from: workspace, rootPath: url.path)
 
         if isRefresh {
@@ -61,7 +73,7 @@ final class WorkspaceLoader {
             await fileTreeModel.loadDirectory(at: url, ignoreRules: ignoreRules)
         }
 
-        print("WorkspaceLoader: Loaded \(fileTreeModel.allNodes.count) nodes")
+        print("[DEBUG] WorkspaceLoader: Loaded \(fileTreeModel.allNodes.count) nodes")
         return isRefresh ? fileTreeModel.totalSelectedTokens : 0
     }
 
@@ -70,6 +82,7 @@ final class WorkspaceLoader {
         workspace: SDWorkspace,
         fileTreeModel: FileTreeModel
     ) {
+        print("[DEBUG] WorkspaceLoader: Updating selection for workspace \(workspace.id)")
         // This is now handled by SelectionManager, just trigger the update
         // The actual selection state will be updated asynchronously
         Task {
@@ -79,8 +92,8 @@ final class WorkspaceLoader {
 
             await MainActor.run {
                 if let data = try? JSONEncoder().encode(files),
-                   let json = String(data: data, encoding: .utf8),
-                   workspace.selectionJSON != json
+                    let json = String(data: data, encoding: .utf8),
+                    workspace.selectionJSON != json
                 {
                     workspace.selectionJSON = json
                 }

@@ -2,17 +2,23 @@ import Foundation
 
 /// Manages file selection operations off the main thread for performance
 actor SelectionManager {
-    private var selectedPaths: Set<String> = [] // All selected paths (files and directories)
-    private var selectedFiles: Set<String> = [] // Only selected files (for token counting)
+    private var selectedPaths: Set<String> = []  // All selected paths (files and directories)
+    private var selectedFiles: Set<String> = []  // Only selected files (for token counting)
     private var tokenCounts: [String: Int] = [:]
     private var totalTokens: Int = 0
 
     /// Toggle selection for a node and all its children
-    func toggleSelection(for nodePath: String, affectedPaths: Set<String>, affectedFiles: Set<String>) async -> SelectionUpdate {
+    func toggleSelection(
+        for nodePath: String, affectedPaths: Set<String>, affectedFiles: Set<String>
+    ) async -> SelectionUpdate {
+        print(
+            "[DEBUG] SelectionManager: Toggling selection for \(nodePath), affected paths: \(affectedPaths.count), files: \(affectedFiles.count)"
+        )
         let startTime = Date()
 
         // Update selection state
         let wasSelected = selectedPaths.contains(nodePath)
+        print("[DEBUG] SelectionManager: Previous state - wasSelected: \(wasSelected)")
 
         if wasSelected {
             // Deselect - remove all affected paths and files
@@ -27,6 +33,7 @@ actor SelectionManager {
                     tokenCounts.removeValue(forKey: filePath)
                 }
             }
+            print("[DEBUG] SelectionManager: Deselected, new totalTokens: \(totalTokens)")
         } else {
             // Select - add all affected paths and files
             for path in affectedPaths {
@@ -37,10 +44,11 @@ actor SelectionManager {
                 selectedFiles.insert(filePath)
                 // Token counts will be calculated asynchronously
             }
+            print("[DEBUG] SelectionManager: Selected, tokens will be calculated async")
         }
 
         let duration = Date().timeIntervalSince(startTime)
-        print("[SelectionManager] Toggle completed in \(String(format: "%.3fs", duration)) for \(affectedPaths.count) files")
+        print("[DEBUG] SelectionManager: Toggle completed in \(String(format: "%.3fs", duration))")
 
         return SelectionUpdate(
             selectedPaths: selectedPaths,
@@ -78,7 +86,9 @@ actor SelectionManager {
         totalTokens = tokenCounts.values.reduce(0, +)
 
         let duration = Date().timeIntervalSince(startTime)
-        print("[SelectionManager] Token counts updated in \(String(format: "%.3fs", duration)) for \(files.count) files")
+        print(
+            "[SelectionManager] Token counts updated in \(String(format: "%.3fs", duration)) for \(files.count) files"
+        )
     }
 
     /// Get current selection state
@@ -89,7 +99,7 @@ actor SelectionManager {
     /// Set selection state from JSON (contains only file paths)
     func setSelection(from json: String) async {
         guard let data = json.data(using: .utf8),
-              let files = try? JSONDecoder().decode(Set<String>.self, from: data)
+            let files = try? JSONDecoder().decode(Set<String>.self, from: data)
         else {
             return
         }
@@ -121,7 +131,7 @@ struct SelectionUpdate: Sendable {
 extension Array {
     nonisolated func chunkedForSelection(into size: Int) -> [[Element]] {
         return stride(from: 0, to: count, by: size).map {
-            Array(self[$0 ..< Swift.min($0 + size, count)])
+            Array(self[$0..<Swift.min($0 + size, count)])
         }
     }
 }
