@@ -24,7 +24,8 @@ struct MainWindow: View {
     @State private var hasAttemptedRestore = false
 
     var body: some View {
-        NavigationSplitView(columnVisibility: $columnVisibility) {
+        ZStack {
+            NavigationSplitView(columnVisibility: $columnVisibility) {
             SidebarView(
                 selection: $selection, filterFocused: $filterFocused,
                 selectedTokenCount: Binding(
@@ -78,7 +79,7 @@ struct MainWindow: View {
                     action: toggleSidebar
                 )
                 .symbolVariant(columnVisibility == .detailOnly ? .none : .fill)
-                .help(columnVisibility == .detailOnly ? "Show Sidebar" : "Hide Sidebar")
+                .help(columnVisibility == .detailOnly ? "Show Sidebar (⌘\\)" : "Hide Sidebar (⌘\\)")
             }
 
             ToolbarSpacer(.fixed)
@@ -88,7 +89,7 @@ struct MainWindow: View {
                     systemImage: "doc.on.doc",
                     action: copyOutput
                 )
-                .help("Copy Context")
+                .help("Copy Context (⇧⌘C)")
             }
         }
         .onAppear {
@@ -106,7 +107,9 @@ struct MainWindow: View {
 
             // Save the current session for restoration
             SessionManager.shared.saveCurrentSession(
-                workspace: newWorkspace, modelContext: modelContext)
+                workspace: newWorkspace, modelContext: modelContext
+            )
+        }
         }
     }
 
@@ -126,7 +129,7 @@ struct MainWindow: View {
         let fetch = FetchDescriptor<SDPreference>()
         if let preference = try? modelContext.fetch(fetch).first {
             appState.includeFileTreeInOutput = preference.includeFileTreeInOutput
-            appState.includeInstructionsInOutput = true  // Keep existing behavior for instructions
+            appState.includeInstructionsInOutput = true // Keep existing behavior for instructions
         }
     }
 
