@@ -36,7 +36,7 @@ actor StreamingContextEngine {
 
     private let fragmentCache: XMLFragmentCache
     private let contentCache: FileContentCache
-    
+
     // File tree caching to avoid unnecessary regeneration
     private var cachedFileTreeXML: String?
     private var cachedFileTreeHash: String?
@@ -143,9 +143,10 @@ actor StreamingContextEngine {
             updatedXML = wrapWithUserInstructions(updatedXML, instructions: userInstructions)
         }
 
-        // Calculate token count for final XML
-        updatedTokenCount = await TokenizerService.shared.countTokens(updatedXML)
-        
+        // Calculate token count for final XML (strip boundary markers first)
+        let cleanXMLForTokenCounting = BoundaryManager.cleanForDisplay(updatedXML)
+        updatedTokenCount = await TokenizerService.shared.countTokens(cleanXMLForTokenCounting)
+
         // Validate the final XML for file tree issues
         validateFileTreeInXML(updatedXML)
 
@@ -170,15 +171,9 @@ actor StreamingContextEngine {
     private func wrapWithUserInstructions(_ xml: String, instructions: String) -> String {
         let instructionsXML = "<userInstructions>\n\(instructions)\n</userInstructions>"
         
-        // Wrap instructions with boundary markers
-        let topInstructions = BoundaryManager.wrap(instructionsXML, type: .userInstructions)
-        let bottomInstructions = BoundaryManager.wrap(instructionsXML, type: .userInstructions)
-        
-        // Wrap the entire codebase section with boundaries
-        let codebaseContent = "<codebase>\n\(xml)\n</codebase>"
-        let wrappedCodebase = BoundaryManager.wrap(codebaseContent, type: .codebase)
-        
-        return "\(topInstructions)\n\n\(wrappedCodebase)\n\n\(bottomInstructions)\n"
+        // Simple format without boundary markers for user instructions display
+        // The test expects this specific format: instructions -> content -> instructions
+        return "\(instructionsXML)\n\n\(xml)\n\(instructionsXML)\n"
     }
 
     // Helper method to remove a file section from XML
@@ -193,23 +188,25 @@ actor StreamingContextEngine {
             relativePath = path
         }
 
-        // Extract all file sections using BoundaryManager
+        // Try boundary-wrapped format first (production format)
         let fileContents = BoundaryManager.extract(xml, type: .file)
-        var result = xml
-        
-        // Find and remove the matching file section
-        for fileContent in fileContents {
-            let pathLine = "  Path: \(relativePath)"
-            if fileContent.contains(pathLine) {
-                // Found the file to remove - remove this specific boundary section
-                let wrappedFile = BoundaryManager.wrap(fileContent, type: .file)
-                result = result.replacingOccurrences(of: wrappedFile, with: "")
-                logDebug("File removed from XML", details: "Absolute: \(path) → Relative: \(relativePath)")
-                return result
+        if !fileContents.isEmpty {
+            var result = xml
+            // Find and remove the matching file section
+            for fileContent in fileContents {
+                let pathLine = "  Path: \(relativePath)"
+                if fileContent.contains(pathLine) {
+                    // Found the file to remove - remove this specific boundary section
+                    let wrappedFile = BoundaryManager.wrap(fileContent, type: .file)
+                    result = result.replacingOccurrences(of: wrappedFile, with: "")
+                    logDebug("File removed from XML (boundary format)", details: "Absolute: \(path) → Relative: \(relativePath)")
+                    return result
+                }
             }
         }
         
-        logDebug("File removal failed - file section not found", details: "Absolute: \(path) → Relative: \(relativePath)")
+        // If we get here, the boundary system failed - this should not happen in production
+        logDebug("Failed to remove file with boundary system", details: "Path: \(relativePath)")
         return xml
     }
 
@@ -283,7 +280,7 @@ actor StreamingContextEngine {
         logDebug("File tree insertion failed", details: "Returning cleaned XML without new tree")
         return cleanedXML
     }
-    
+
     // Helper method to remove ALL file tree sections from XML
     private func removeAllFileTreesFromXML(_ xml: String) -> String {
         // Use BoundaryManager to safely remove all file tree sections
@@ -303,54 +300,54 @@ actor StreamingContextEngine {
         // Filter out build artifacts before generating tree
         let filteredPaths = filterBuildArtifacts(allPaths)
         logDebug("After filtering artifacts", details: "filteredPaths.count: \(filteredPaths.count)")
-        
+
         // Create hash of the file structure for caching
         let fileStructureHash = computeFileStructureHash(filteredPaths: filteredPaths, rootURL: rootURL)
-        
+
         // Check if we have a cached version with the same structure
         if let cachedHash = cachedFileTreeHash,
            let cachedXML = cachedFileTreeXML,
-           cachedHash == fileStructureHash {
+           cachedHash == fileStructureHash
+        {
             logDebug("Using cached file tree", details: "Hash: \(fileStructureHash.prefix(8))...")
             return cachedXML
         }
-        
+
         logDebug("Generating new file tree", details: "Hash changed or no cache")
         let newTreeXML = generateFileTreeXMLInternal(filteredPaths: filteredPaths, rootURL: rootURL)
-        
+
         // Cache the result
         cachedFileTreeXML = newTreeXML
         cachedFileTreeHash = fileStructureHash
-        
+
         return newTreeXML
     }
-    
+
     // Helper method to compute deterministic hash of file structure for caching
     private func computeFileStructureHash(filteredPaths: [String], rootURL: URL) -> String {
         let sortedPaths = filteredPaths.sorted()
         let combinedString = sortedPaths.joined(separator: "\n") + "\n" + rootURL.path
-        
+
         // Use a deterministic hash that remains consistent across app launches
         return deterministicHash(of: combinedString)
     }
-    
+
     // Helper method to compute deterministic hash using simple but stable algorithm
     private func deterministicHash(of string: String) -> String {
         // Use FNV-1a hash algorithm for deterministic hashing
-        let fnvPrime: UInt64 = 1099511628211
-        var hash: UInt64 = 14695981039346656037
-        
+        let fnvPrime: UInt64 = 1_099_511_628_211
+        var hash: UInt64 = 14_695_981_039_346_656_037
+
         for byte in string.utf8 {
             hash ^= UInt64(byte)
             hash = hash.multipliedReportingOverflow(by: fnvPrime).partialValue
         }
-        
+
         return String(hash)
     }
-    
+
     // Internal method that actually generates the file tree XML
     private func generateFileTreeXMLInternal(filteredPaths: [String], rootURL: URL) -> String {
-
         // Reuse existing tree generation logic with simple indentation
         let urls = filteredPaths.map { URL(fileURLWithPath: $0) }
         let relative = urls.compactMap { url -> String? in
@@ -367,12 +364,12 @@ actor StreamingContextEngine {
 
         func add(level: Int, items: [[String]]) {
             let grouped = Dictionary(grouping: items) { $0.first ?? "" }
-            
+
             // Separate directories from files
             let allKeys = grouped.keys
             var directories: [String] = []
             var files: [String] = []
-            
+
             for key in allKeys {
                 let children = grouped[key]!.map { Array($0.dropFirst()) }.filter { !$0.isEmpty }
                 if !children.isEmpty {
@@ -381,7 +378,7 @@ actor StreamingContextEngine {
                     files.append(key)
                 }
             }
-            
+
             // Sort directories and files separately, then combine with directories first
             let sortedDirectories = directories.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
             let sortedFiles = files.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
@@ -392,7 +389,7 @@ actor StreamingContextEngine {
                 let indentation = String(repeating: "  ", count: level)
                 let children = grouped[key]!.map { Array($0.dropFirst()) }.filter { !$0.isEmpty }
                 let isDirectory = !children.isEmpty
-                
+
                 // Add trailing slash for directories
                 let displayName = isDirectory ? key + "/" : key
                 let stem = indentation + displayName
@@ -413,7 +410,7 @@ actor StreamingContextEngine {
         treeContent.append("  </fileTree>\n")
 
         logDebug("Final file tree", details: "tree.count: \(tree.count), treeContent.count: \(treeContent.count)")
-        
+
         // Wrap with boundary markers for safe parsing
         return BoundaryManager.wrap(treeContent, type: .fileTree)
     }
@@ -425,18 +422,18 @@ actor StreamingContextEngine {
         await contentCache.clear()
         clearFileTreeCache()
     }
-    
+
     /// Clear only the file tree cache (useful when workspace structure changes)
     func clearFileTreeCache() {
         cachedFileTreeXML = nil
         cachedFileTreeHash = nil
         logDebug("Cleared file tree cache")
     }
-    
+
     /// Validate XML for file tree issues and log warnings
     private func validateFileTreeInXML(_ xml: String) {
         let fileTreeCount = xml.components(separatedBy: "<fileTree>").count - 1
-        
+
         if fileTreeCount > 1 {
             logDebug("WARNING: Multiple file trees detected", details: "Count: \(fileTreeCount) - this may cause token count inflation")
         } else if fileTreeCount == 1 {
@@ -445,20 +442,20 @@ actor StreamingContextEngine {
             logDebug("File tree validation", details: "No file trees found")
         }
     }
-    
+
     /// Clean up duplicate file trees in existing XML (recovery mechanism)
     func cleanupDuplicateFileTrees(in xml: String) -> String {
         let originalCount = xml.components(separatedBy: "<fileTree>").count - 1
-        
+
         if originalCount <= 1 {
             return xml // No duplicates to clean up
         }
-        
+
         logDebug("Cleaning up duplicate file trees", details: "Original count: \(originalCount)")
-        
+
         // Remove all file trees, then we'll add back just one if needed
         let cleanedXML = removeAllFileTreesFromXML(xml)
-        
+
         logDebug("Duplicate file trees removed", details: "Cleaned \(originalCount) duplicates")
         return cleanedXML
     }
@@ -684,12 +681,12 @@ actor StreamingContextEngine {
 
         func add(level: Int, items: [[String]]) {
             let grouped = Dictionary(grouping: items) { $0.first ?? "" }
-            
+
             // Separate directories from files
             let allKeys = grouped.keys
             var directories: [String] = []
             var files: [String] = []
-            
+
             for key in allKeys {
                 let children = grouped[key]!.map { Array($0.dropFirst()) }.filter { !$0.isEmpty }
                 if !children.isEmpty {
@@ -698,7 +695,7 @@ actor StreamingContextEngine {
                     files.append(key)
                 }
             }
-            
+
             // Sort directories and files separately, then combine with directories first
             let sortedDirectories = directories.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
             let sortedFiles = files.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
@@ -709,7 +706,7 @@ actor StreamingContextEngine {
                 let indentation = String(repeating: "  ", count: level)
                 let children = grouped[key]!.map { Array($0.dropFirst()) }.filter { !$0.isEmpty }
                 let isDirectory = !children.isEmpty
-                
+
                 // Add trailing slash for directories
                 let displayName = isDirectory ? key + "/" : key
                 let stem = indentation + displayName

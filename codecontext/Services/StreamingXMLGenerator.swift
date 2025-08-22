@@ -152,7 +152,7 @@ actor StreamingXMLGenerator {
     }
 
     // MARK: - Private Methods
-    
+
     /// Debug logging helper
     private func logDebug(_ message: String, details: String = "") {
         // Simple debug logging - in production app you'd use your logging framework
@@ -184,7 +184,7 @@ actor StreamingXMLGenerator {
         // Stream file content in chunks using async reading
         var totalBytes: Int64 = 0
         var offset: UInt64 = 0
-        
+
         while !isCancelled {
             // Use async file reading to avoid blocking the actor
             let chunk: Data
@@ -192,7 +192,7 @@ actor StreamingXMLGenerator {
                 // Read chunk asynchronously using FileHandle's async API
                 let handle = try FileHandle(forReadingFrom: file.url)
                 defer { try? handle.close() }
-                
+
                 try handle.seek(toOffset: offset)
                 chunk = try handle.read(upToCount: config.chunkSize) ?? Data()
             } catch {
@@ -213,7 +213,7 @@ actor StreamingXMLGenerator {
                 // Skip non-UTF8 content
                 offset += UInt64(chunk.count)
             }
-            
+
             // If chunk is smaller than requested, we've reached EOF
             if chunk.count < config.chunkSize {
                 break
