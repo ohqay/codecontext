@@ -13,6 +13,7 @@ struct ContentView: View {
         ZStack {
             MainWindow()
             NotificationOverlay()
+            ToastOverlay()
         }
     }
 }

@@ -26,7 +26,7 @@ actor AsyncFileReader {
                     // Use FileHandle for efficient local file reading
                     let fileHandle = try FileHandle(forReadingFrom: url)
                     defer { try? fileHandle.close() }
-                    
+
                     let data = try fileHandle.readToEnd() ?? Data()
                     continuation.resume(returning: data)
                 } catch {
