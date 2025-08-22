@@ -21,9 +21,14 @@ final class codecontextUITestsLaunchTests: XCTestCase {
         let app = XCUIApplication()
         app.launch()
 
-        // Insert steps here to perform after app launch but before taking a screenshot,
-        // such as logging into a test account or navigating somewhere in the app
-
+        // Verify the app launches successfully and main interface is present
+        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 10), "App should launch within 10 seconds")
+        
+        // Verify basic UI elements are present
+        // Note: These would need to be updated based on actual UI accessibility identifiers
+        XCTAssertTrue(app.windows.firstMatch.exists, "Main window should be visible")
+        
+        // Take screenshot for visual verification if needed
         let attachment = XCTAttachment(screenshot: app.screenshot())
         attachment.name = "Launch Screen"
         attachment.lifetime = .keepAlways
