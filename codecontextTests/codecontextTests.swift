@@ -61,6 +61,7 @@ struct codecontextTests {
             removedPaths: [],
             allFiles: [],
             includeTree: false,
+            includeFiles: true,
             rootURL: rootURL,
             userInstructions: instructions
         )
@@ -87,6 +88,7 @@ struct codecontextTests {
             removedPaths: [],
             allFiles: [],
             includeTree: false,
+            includeFiles: true,
             rootURL: rootURL,
             userInstructions: ""
         )
@@ -107,6 +109,7 @@ struct codecontextTests {
             removedPaths: [],
             allFiles: [],
             includeTree: false,
+            includeFiles: true,
             rootURL: rootURL,
             userInstructions: "   \n\t  "
         )
@@ -114,5 +117,49 @@ struct codecontextTests {
         // Should not wrap context when instructions are only whitespace
         #expect(!result.xml.contains("<userInstructions>"))
         #expect(result.xml == testXML)
+    }
+
+    @Test func noContentWithInstructionsShowsInstructionsOnce() async throws {
+        let engine = await StreamingContextEngine()
+        let testXML = "<codebase>\n</codebase>\n"
+        let instructions = "Please analyze this code."
+        let rootURL = URL(fileURLWithPath: "/tmp")
+
+        let result = try await engine.updateContext(
+            currentXML: testXML,
+            addedPaths: [],
+            removedPaths: [],
+            allFiles: [],
+            includeTree: false,
+            includeFiles: false,
+            rootURL: rootURL,
+            userInstructions: instructions
+        )
+
+        // Should not contain codebase tags when no content
+        #expect(!result.xml.contains("<codebase>"))
+        // Should contain instructions only once
+        let expectedXML = "<userInstructions>\n\(instructions)\n</userInstructions>"
+        #expect(result.xml == expectedXML)
+    }
+
+    @Test func noContentNoInstructionsReturnsEmpty() async throws {
+        let engine = await StreamingContextEngine()
+        let testXML = "<codebase>\n</codebase>\n"
+        let rootURL = URL(fileURLWithPath: "/tmp")
+
+        let result = try await engine.updateContext(
+            currentXML: testXML,
+            addedPaths: [],
+            removedPaths: [],
+            allFiles: [],
+            includeTree: false,
+            includeFiles: false,
+            rootURL: rootURL,
+            userInstructions: ""
+        )
+
+        // Should return empty string when nothing is enabled
+        #expect(result.xml.isEmpty)
     }
 }

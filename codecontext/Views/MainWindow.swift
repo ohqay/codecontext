@@ -5,6 +5,7 @@ import SwiftUI
 @Observable
 final class AppState {
     var includeFileTreeInOutput: Bool = true
+    var includeFilesInOutput: Bool = true
     var includeInstructionsInOutput: Bool = true
     var currentWorkspace: SDWorkspace?
     var selectedTokenCount: Int = 0
@@ -44,6 +45,10 @@ struct MainWindow: View {
                     includeFileTree: Binding(
                         get: { appState.includeFileTreeInOutput },
                         set: { appState.includeFileTreeInOutput = $0 }
+                    ),
+                    includeFiles: Binding(
+                        get: { appState.includeFilesInOutput },
+                        set: { appState.includeFilesInOutput = $0 }
                     ),
                     includeInstructions: Binding(
                         get: { appState.includeInstructionsInOutput },
@@ -129,6 +134,7 @@ struct MainWindow: View {
         let fetch = FetchDescriptor<SDPreference>()
         if let preference = try? modelContext.fetch(fetch).first {
             appState.includeFileTreeInOutput = preference.includeFileTreeInOutput
+            appState.includeFilesInOutput = preference.includeFilesInOutput
             appState.includeInstructionsInOutput = true // Keep existing behavior for instructions
         }
     }
@@ -141,6 +147,18 @@ struct MainWindow: View {
         let fetch = FetchDescriptor<SDPreference>()
         if let preference = try? modelContext.fetch(fetch).first {
             preference.includeFileTreeInOutput = appState.includeFileTreeInOutput
+            try? modelContext.save()
+        }
+    }
+
+    private func toggleFiles() {
+        // Toggle the AppState value
+        appState.includeFilesInOutput.toggle()
+
+        // Persist to database
+        let fetch = FetchDescriptor<SDPreference>()
+        if let preference = try? modelContext.fetch(fetch).first {
+            preference.includeFilesInOutput = appState.includeFilesInOutput
             try? modelContext.save()
         }
     }

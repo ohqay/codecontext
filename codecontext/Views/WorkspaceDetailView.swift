@@ -6,6 +6,7 @@ import UniformTypeIdentifiers
 struct WorkspaceDetailView: View {
     let workspace: SDWorkspace
     @Binding var includeFileTree: Bool
+    @Binding var includeFiles: Bool
     @Binding var includeInstructions: Bool
     @Binding var selectedTokenCount: Int
 
@@ -42,6 +43,7 @@ struct WorkspaceDetailView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         OutputHeader(
                             includeFileTree: $includeFileTree,
+                            includeFiles: $includeFiles,
                             includeInstructions: $includeInstructions,
                             selectedFileCount: selectedFileCount,
                             selectedTokenCount: selectedTokenCount
@@ -65,6 +67,7 @@ struct WorkspaceDetailView: View {
             WorkspaceChangeHandlers(
                 workspace: workspace,
                 includeFileTree: includeFileTree,
+                includeFiles: includeFiles,
                 includeInstructions: includeInstructions,
                 lastSelectionJSON: $lastSelectionJSON,
                 onTreeToggle: {
@@ -134,12 +137,24 @@ struct WorkspaceDetailView: View {
                 print(
                     "[DEBUG] File tree generation - allFiles.count: \(allFiles.count), includeFileTree: \(includeFileTree)"
                 )
+                
+                // Determine initial XML based on what content will be generated
+                let initialXML: String
+                if includeFileTree || includeFiles {
+                    // Will have codebase content, so start with codebase tags
+                    initialXML = "<codebase>\n</codebase>\n"
+                } else {
+                    // No codebase content, start empty
+                    initialXML = ""
+                }
+                
                 let result = try await engine.updateContext(
-                    currentXML: "<codebase>\n</codebase>\n",
+                    currentXML: initialXML,
                     addedPaths: [],
                     removedPaths: [],
                     allFiles: allFiles,
                     includeTree: includeFileTree,
+                    includeFiles: includeFiles,
                     rootURL: rootURL,
                     userInstructions: includeInstructions ? (workspace.userInstructions ?? "") : ""
                 )
@@ -181,8 +196,17 @@ struct WorkspaceDetailView: View {
             let removedPaths = previousSelectedPaths.subtracting(selectedPaths)
 
             // Always use incremental updates - even first generation is just adding all files to empty context
-            let currentXML =
-                lastGeneratedXML.isEmpty ? "<codebase>\n</codebase>\n" : lastGeneratedXML
+            let currentXML: String
+            if lastGeneratedXML.isEmpty {
+                // First generation - determine initial XML based on what content will be generated
+                if includeFileTree || includeFiles {
+                    currentXML = "<codebase>\n</codebase>\n"
+                } else {
+                    currentXML = ""
+                }
+            } else {
+                currentXML = lastGeneratedXML
+            }
 
             print("[Incremental Update] Added: \(addedPaths.count), Removed: \(removedPaths.count)")
             print(
@@ -205,6 +229,7 @@ struct WorkspaceDetailView: View {
                 removedPaths: removedPaths,
                 allFiles: allFiles,
                 includeTree: includeFileTree,
+                includeFiles: includeFiles,
                 rootURL: rootURL,
                 userInstructions: includeInstructions ? (workspace.userInstructions ?? "") : ""
             )
@@ -255,13 +280,13 @@ struct WorkspaceDetailView: View {
         }
     }
 
-    private func scheduleRegeneration(delay: UInt64 = 500_000_000) {
+    private func scheduleRegeneration(delay: UInt64 = 50_000_000) {
         // Cancel any existing regeneration task
         regenerationTask?.cancel()
 
-        // Schedule new regeneration with configurable debouncing
+        // Schedule new regeneration with minimal debouncing
         regenerationTask = Task {
-            // Debounce to allow operations to complete (default 500ms)
+            // Minimal debounce to coalesce rapid clicks (50ms)
             try? await Task.sleep(nanoseconds: delay)
 
             // Check if task was cancelled
@@ -317,6 +342,7 @@ struct WorkspaceDetailView: View {
 
 private struct OutputHeader: View {
     @Binding var includeFileTree: Bool
+    @Binding var includeFiles: Bool
     @Binding var includeInstructions: Bool
     let selectedFileCount: Int
     let selectedTokenCount: Int
@@ -324,6 +350,7 @@ private struct OutputHeader: View {
     var body: some View {
         HStack {
             Toggle("File tree", isOn: $includeFileTree)
+            Toggle("Files", isOn: $includeFiles)
             Toggle("Instructions", isOn: $includeInstructions)
 
             Spacer()
@@ -389,6 +416,7 @@ private struct OutputNotificationHandlers: ViewModifier {
 private struct WorkspaceChangeHandlers: ViewModifier {
     let workspace: SDWorkspace
     let includeFileTree: Bool
+    let includeFiles: Bool
     let includeInstructions: Bool
     @Binding var lastSelectionJSON: String
     let onTreeToggle: () -> Void
@@ -397,6 +425,9 @@ private struct WorkspaceChangeHandlers: ViewModifier {
     func body(content: Content) -> some View {
         content
             .onChange(of: includeFileTree) { _, _ in
+                onTreeToggle()
+            }
+            .onChange(of: includeFiles) { _, _ in
                 onTreeToggle()
             }
             .onChange(of: includeInstructions) { _, _ in
@@ -437,9 +468,9 @@ private struct LifecycleHandlers: ViewModifier {
                 // Load all files for the workspace
                 await loadAllFiles()
 
-                // Update counts and generate initial output with minimal delay
+                // Update counts and generate initial output immediately
                 onLoad()
-                scheduleRegeneration(100_000_000) // 100ms for initial load
+                scheduleRegeneration(0) // No delay for initial load
             }
             .onDisappear {
                 // Cancel any pending regeneration when view disappears

@@ -72,6 +72,7 @@ actor StreamingContextEngine {
         removedPaths: Set<String>,
         allFiles: [FileInfo],
         includeTree: Bool,
+        includeFiles: Bool,
         rootURL: URL,
         userInstructions: String = ""
     ) async throws -> GenerationResult {
@@ -81,7 +82,7 @@ actor StreamingContextEngine {
         var updatedXML = currentXML
         var updatedTokenCount = 0
 
-        // Remove files that were deselected
+        // Remove files that were deselected or if includeFiles is false
         for pathToRemove in removedPaths {
             let xmlBeforeRemoval = updatedXML
             updatedXML = removeFileFromXML(updatedXML, path: pathToRemove, rootURL: rootURL)
@@ -92,8 +93,14 @@ actor StreamingContextEngine {
             }
         }
 
-        // Add newly selected files
-        if !addedPaths.isEmpty {
+        // If includeFiles is false, remove ALL file content but keep codebase structure
+        if !includeFiles {
+            updatedXML = removeAllFileContent(updatedXML)
+            logDebug("Removed all file content", details: "includeFiles is false")
+        }
+
+        // Add newly selected files (only if includeFiles is true)
+        if !addedPaths.isEmpty && includeFiles {
             var newFilesXML = ""
 
             for path in addedPaths {
@@ -119,6 +126,8 @@ actor StreamingContextEngine {
 
             // Insert new files before closing </codebase> tag
             updatedXML = insertFilesIntoXML(updatedXML, newFilesXML: newFilesXML)
+        } else if !addedPaths.isEmpty && !includeFiles {
+            logDebug("Skipping file content generation", details: "includeFiles is false, added \(addedPaths.count) paths ignored")
         }
 
         // Update file tree if needed
@@ -136,11 +145,31 @@ actor StreamingContextEngine {
             logDebug("Skipping file tree generation", details: "includeTree is false")
         }
 
-        // Always clean existing user instructions first, then wrap with new ones if provided
+        // Check if we have any actual codebase content
+        let hasCodebaseContent = includeFiles || includeTree
+        let cleanInstructions = userInstructions.trimmingCharacters(in: .whitespacesAndNewlines)
+        let hasInstructions = !cleanInstructions.isEmpty
+
+        // Always clean existing user instructions first
         updatedXML = stripExistingUserInstructions(updatedXML)
 
-        if !userInstructions.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            updatedXML = wrapWithUserInstructions(updatedXML, instructions: userInstructions)
+        // Handle different content scenarios
+        if !hasCodebaseContent {
+            // No codebase content - remove codebase tags entirely
+            updatedXML = stripCodebaseTags(updatedXML)
+            
+            if hasInstructions {
+                // Only instructions, show them once (not duplicated)
+                updatedXML = "<userInstructions>\n\(cleanInstructions)\n</userInstructions>"
+            } else {
+                // Nothing to show
+                updatedXML = ""
+            }
+        } else {
+            // Has codebase content - wrap with instructions if provided
+            if hasInstructions {
+                updatedXML = wrapWithUserInstructions(updatedXML, instructions: cleanInstructions)
+            }
         }
 
         // Calculate token count for final XML (strip boundary markers first)
@@ -285,6 +314,28 @@ actor StreamingContextEngine {
     private func removeAllFileTreesFromXML(_ xml: String) -> String {
         // Use BoundaryManager to safely remove all file tree sections
         return BoundaryManager.remove(xml, type: .fileTree)
+    }
+
+    // Helper method to remove ALL file content but keep codebase structure
+    private func removeAllFileContent(_ xml: String) -> String {
+        // Use BoundaryManager to safely remove all file sections
+        return BoundaryManager.remove(xml, type: .file)
+    }
+
+    // Helper method to remove codebase tags entirely when there's no content
+    private func stripCodebaseTags(_ xml: String) -> String {
+        // Remove empty codebase tags and any content between them
+        let pattern = "<codebase>\\s*</codebase>\\s*"
+        
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.dotMatchesLineSeparators]) else {
+            logDebug("Failed to create regex for codebase tag removal", details: pattern)
+            return xml
+        }
+        
+        let range = NSRange(location: 0, length: xml.utf16.count)
+        let result = regex.stringByReplacingMatches(in: xml, options: [], range: range, withTemplate: "")
+        
+        return result.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     // Helper method to generate file tree XML with caching

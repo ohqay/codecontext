@@ -53,6 +53,8 @@ CodebaseExplorer {
 
 **Continuous Refactoring Required**: Fix poor patterns immediately when encountered, even on unrelated tasks.
 
+**Pure SwiftUI App**: This app uses SwiftUI's App protocol without AppDelegate. Handle all app lifecycle through SwiftUI patterns, not UIKit/AppKit delegates.
+
 ## SwiftData Architecture (CRITICAL)
 
 **MUST use SwiftData for ALL persistence. NO UserDefaults, JSON files, or in-memory storage for data.**
@@ -72,6 +74,65 @@ struct Workspace: Codable { }            // No struct models
 class VM: ObservableObject { }           // No ObservableObject
 UserDefaults.standard.set(...)           // No UserDefaults for data
 ```
+
+## Actor Concurrency Architecture
+
+**Background Services**: All async/background processing uses `actor` isolation for thread safety and performance.
+
+**UI Updates**: All UI-related code uses `@MainActor` to ensure main thread execution.
+
+**Pattern:**
+```swift
+// Background service
+actor TokenProcessor {
+    func processTokens() async { ... }
+}
+
+// UI update
+@MainActor
+func updateInterface() {
+    // UI modifications here
+}
+```
+
+**Always:** Dispatch UI updates to MainActor from background actors.
+
+## Liquid Glass Design Context
+
+This app targets macOS 26 with Apple's 2025 **Liquid Glass** design language. Glass effects are **native SwiftUI APIs**, not custom implementations.
+
+**Native Modifiers:**
+- `.glassEffect()` - Native glass effect modifier
+- `GlassEffectContainer` - Groups glass elements for consistency
+- `.glassEffectID()` - Transitions between glass elements
+- `.interactive` - Glass interaction effects (scaling, bouncing, shimmering)
+
+**Usage:** Apply glass effects liberally following Apple's design guidelines for modern, translucent interfaces.
+
+## Structured Logging Convention
+
+Use structured logging with component prefixes for consistent debugging:
+
+```swift
+print("[ComponentName] Descriptive message")
+print("[TokenizerService] Successfully initialized")
+print("[DEBUG] WorkspaceLoader: Loaded \(count) nodes")
+```
+
+**Benefits:** Easy filtering, component identification, and debugging across the codebase.
+
+## Notification Extensions Pattern
+
+Centralize all notification names in `extension Notification.Name` blocks for type safety and discoverability:
+
+```swift
+extension Notification.Name {
+    static let workspaceChanged = Notification.Name("workspaceChanged")
+    static let tokenProcessingComplete = Notification.Name("tokenProcessingComplete")
+}
+```
+
+**Always:** Define notification names in extensions, never as raw strings.
 
 ## Quick Orientation
 

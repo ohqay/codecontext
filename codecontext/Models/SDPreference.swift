@@ -23,6 +23,7 @@ final class SDPreference {
 
     // Output options
     var includeFileTreeInOutput: Bool
+    var includeFilesInOutput: Bool
 
     // Session restoration options
     var enableSessionRestoration: Bool = true
@@ -42,6 +43,7 @@ final class SDPreference {
         defaultExcludeDSStore: Bool = true,
         defaultExcludeDerivedData: Bool = true,
         includeFileTreeInOutput: Bool = true,
+        includeFilesInOutput: Bool = true,
         enableSessionRestoration: Bool = true,
         lastActiveWorkspaceID: String? = nil
     ) {
@@ -58,6 +60,7 @@ final class SDPreference {
         self.defaultExcludeDSStore = defaultExcludeDSStore
         self.defaultExcludeDerivedData = defaultExcludeDerivedData
         self.includeFileTreeInOutput = includeFileTreeInOutput
+        self.includeFilesInOutput = includeFilesInOutput
         self.enableSessionRestoration = enableSessionRestoration
         self.lastActiveWorkspaceID = lastActiveWorkspaceID
     }

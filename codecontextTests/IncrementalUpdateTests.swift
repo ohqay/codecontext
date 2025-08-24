@@ -127,6 +127,7 @@ final class IncrementalUpdateTests: XCTestCase {
                 removedPaths: [],
                 allFiles: allFiles,
                 includeTree: false,
+                includeFiles: true,
                 rootURL: testDir
             )
 
@@ -169,6 +170,7 @@ final class IncrementalUpdateTests: XCTestCase {
                 removedPaths: [],
                 allFiles: allFiles,
                 includeTree: true, // Include file tree
+                includeFiles: true,
                 rootURL: testDir
             )
 
@@ -217,6 +219,7 @@ final class IncrementalUpdateTests: XCTestCase {
                 removedPaths: [],
                 allFiles: allFiles,
                 includeTree: true, // Include file tree
+                includeFiles: true,
                 rootURL: testDir
             )
 
@@ -340,6 +343,7 @@ final class IncrementalUpdateTests: XCTestCase {
                 removedPaths: [],
                 allFiles: allFiles,
                 includeTree: false,
+                includeFiles: true,
                 rootURL: testDir
             )
 
@@ -354,6 +358,7 @@ final class IncrementalUpdateTests: XCTestCase {
                 removedPaths: [],
                 allFiles: allFiles,
                 includeTree: false,
+                includeFiles: true,
                 rootURL: testDir
             )
 
@@ -369,6 +374,7 @@ final class IncrementalUpdateTests: XCTestCase {
                 removedPaths: [helperFile.path],
                 allFiles: allFiles,
                 includeTree: false,
+                includeFiles: true,
                 rootURL: testDir
             )
 
@@ -387,6 +393,7 @@ final class IncrementalUpdateTests: XCTestCase {
                 removedPaths: [],
                 allFiles: allFiles,
                 includeTree: false,
+                includeFiles: true,
                 rootURL: testDir
             )
 
@@ -479,6 +486,7 @@ final class IncrementalUpdateTests: XCTestCase {
                 removedPaths: [],
                 allFiles: allFiles,
                 includeTree: false,
+                includeFiles: true,
                 rootURL: testDir
             )
 
@@ -496,6 +504,7 @@ final class IncrementalUpdateTests: XCTestCase {
                 removedPaths: [],
                 allFiles: allFiles,
                 includeTree: false,
+                includeFiles: true,
                 rootURL: testDir
             )
 
@@ -513,6 +522,7 @@ final class IncrementalUpdateTests: XCTestCase {
                 removedPaths: step2Paths,
                 allFiles: allFiles,
                 includeTree: false,
+                includeFiles: true,
                 rootURL: testDir
             )
 
@@ -532,6 +542,7 @@ final class IncrementalUpdateTests: XCTestCase {
                 removedPaths: [],
                 allFiles: allFiles,
                 includeTree: false,
+                includeFiles: true,
                 rootURL: testDir
             )
 
